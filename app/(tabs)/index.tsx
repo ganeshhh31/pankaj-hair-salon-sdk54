@@ -11,14 +11,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 
 export default function HomeScreen() {
-  const workers = [
-    'Owner',
-    'Gotu',
-    'Sanjay',
-    'Pintu',
-    'Ajit',
-    'Abhijit',
-  ];
+  const workers = ['Owner', 'Gotu', 'Sanjay', 'Pintu', 'Ajit', 'Abhijit'];
 
   const services = [
     { name: 'Hair Cut', price: 150 },
@@ -38,6 +31,36 @@ export default function HomeScreen() {
 
   const [transactions, setTransactions] = useState<any[]>([]);
   const [totalCollection, setTotalCollection] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    loadTransactions();
+    
+  }, []);
+
+  const loadTransactions = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('transactions');
+
+console.log('Loaded:', saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        console.log('Parsed:', parsed);
+        setTransactions(parsed);
+
+        const total = parsed.reduce(
+          (sum: number, item: any) => sum + item.amount,
+          0
+        );
+
+        setTotalCollection(total);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+
+    setIsLoaded(true);
+  };
 
   const handleServiceChange = (serviceName: string) => {
     setSelectedService(serviceName);
@@ -51,19 +74,38 @@ export default function HomeScreen() {
     }
   };
 
-  const saveTransaction = () => {
+  const saveTransaction = async () => {
     const newTransaction = {
+      id: Date.now(),
       worker: selectedWorker,
       service: selectedService,
       amount: Number(amount),
       paymentMode,
+      date: new Date().toLocaleDateString(),
+      time: new Date().toLocaleTimeString(),
     };
 
-    setTransactions([newTransaction, ...transactions]);
+    const updatedTransactions = [
+      newTransaction,
+      ...transactions,
+    ];
 
-    setTotalCollection(
-      totalCollection + Number(amount)
-    );
+    setTransactions(updatedTransactions);
+
+    const updatedTotal =
+      totalCollection + Number(amount);
+
+    setTotalCollection(updatedTotal);
+
+    try {
+      await AsyncStorage.setItem(
+        'transactions',
+        JSON.stringify(updatedTransactions)
+      );
+      console.log('Saved:', updatedTransactions);
+    } catch (error) {
+      console.log(error);
+    }
 
     setSelectedWorker('Owner');
     setSelectedService('Hair Cut');
@@ -79,6 +121,14 @@ export default function HomeScreen() {
       .reduce((sum, item) => sum + item.amount, 0);
   };
 
+  if (!isLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
+
   if (screen === 'transaction') {
     return (
       <ScrollView style={styles.container}>
@@ -88,15 +138,9 @@ export default function HomeScreen() {
 
         <Picker
           selectedValue={selectedWorker}
-          onValueChange={(value) =>
-            setSelectedWorker(value)
-          }>
+          onValueChange={(value) => setSelectedWorker(value)}>
           {workers.map((worker) => (
-            <Picker.Item
-              key={worker}
-              label={worker}
-              value={worker}
-            />
+            <Picker.Item key={worker} label={worker} value={worker} />
           ))}
         </Picker>
 
@@ -127,9 +171,7 @@ export default function HomeScreen() {
 
         <Picker
           selectedValue={paymentMode}
-          onValueChange={(value) =>
-            setPaymentMode(value)
-          }>
+          onValueChange={(value) => setPaymentMode(value)}>
           <Picker.Item label="Cash" value="Cash" />
           <Picker.Item label="UPI" value="UPI" />
         </Picker>
@@ -158,13 +200,8 @@ export default function HomeScreen() {
       <Text style={styles.title}>💈 Pankaj Hair Salon</Text>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>
-          Today's Collection
-        </Text>
-
-        <Text style={styles.amount}>
-          ₹{totalCollection}
-        </Text>
+        <Text style={styles.cardTitle}>Today's Collection</Text>
+        <Text style={styles.amount}>₹{totalCollection}</Text>
       </View>
 
       <TouchableOpacity
@@ -175,34 +212,25 @@ export default function HomeScreen() {
         </Text>
       </TouchableOpacity>
 
-      <Text style={styles.heading}>
-        Worker Earnings
-      </Text>
+      <Text style={styles.heading}>Worker Earnings</Text>
 
       {workers.map((worker) => (
-        <View
-          key={worker}
-          style={styles.workerCard}>
-          <Text style={styles.workerName}>
-            {worker}
-          </Text>
-
+        <View key={worker} style={styles.workerCard}>
+          <Text style={styles.workerName}>{worker}</Text>
           <Text style={styles.workerAmount}>
             ₹{getWorkerTotal(worker)}
           </Text>
         </View>
       ))}
 
-      <Text style={styles.heading}>
-        Recent Transactions
-      </Text>
+      <Text style={styles.heading}>Recent Transactions</Text>
 
       {transactions.length === 0 ? (
         <Text>No transactions yet</Text>
       ) : (
-        transactions.map((item, index) => (
+        transactions.map((item) => (
           <View
-            key={index}
+            key={item.id}
             style={styles.transactionCard}>
             <Text>
               {item.worker} • {item.service}
@@ -210,6 +238,10 @@ export default function HomeScreen() {
 
             <Text>
               ₹{item.amount} ({item.paymentMode})
+            </Text>
+
+            <Text>
+              {item.date} • {item.time}
             </Text>
           </View>
         ))
@@ -225,45 +257,43 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 60,
   },
-
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 20,
   },
-
   card: {
     backgroundColor: '#fff',
     padding: 20,
     borderRadius: 12,
     marginBottom: 20,
   },
-
   cardTitle: {
     fontSize: 16,
     color: '#666',
   },
-
   amount: {
     fontSize: 32,
     fontWeight: 'bold',
     marginTop: 10,
   },
-
   button: {
     backgroundColor: '#000',
     padding: 16,
     borderRadius: 10,
     marginBottom: 20,
   },
-
   saveButton: {
     backgroundColor: 'green',
     padding: 16,
     borderRadius: 10,
     marginTop: 20,
   },
-
   backButton: {
     backgroundColor: '#555',
     padding: 16,
@@ -271,21 +301,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 40,
   },
-
   buttonText: {
     color: '#fff',
     textAlign: 'center',
     fontSize: 18,
     fontWeight: '600',
   },
-
   label: {
     fontSize: 16,
     fontWeight: '600',
     marginTop: 10,
     marginBottom: 5,
   },
-
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
@@ -293,14 +320,12 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#fff',
   },
-
   heading: {
     fontSize: 22,
     fontWeight: 'bold',
     marginTop: 20,
     marginBottom: 10,
   },
-
   workerCard: {
     backgroundColor: '#fff',
     padding: 15,
@@ -309,17 +334,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-
   workerName: {
     fontSize: 16,
     fontWeight: '600',
   },
-
   workerAmount: {
     fontSize: 16,
     fontWeight: 'bold',
   },
-
   transactionCard: {
     backgroundColor: '#fff',
     padding: 15,
