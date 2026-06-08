@@ -40,6 +40,16 @@ export default function HomeScreen() {
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  // V7 — worker attendance & settlement
+  const defaultWorkerStatus = workers.map((w) => ({
+    name: w,
+    active: true,
+  }));
+  const [workerStatus, setWorkerStatus] = useState<
+    { name: string; active: boolean }[]
+  >(defaultWorkerStatus);
+  const [settlements, setSettlements] = useState<any[]>([]);
+
   useEffect(() => {
     loadTransactions();
   }, []);
@@ -96,6 +106,19 @@ export default function HomeScreen() {
       if (savedDayClosed === 'true') {
         setDayClosed(true);
       }
+
+      const savedWorkerStatus =
+        await AsyncStorage.getItem('workerStatus');
+      if (savedWorkerStatus) {
+        setWorkerStatus(JSON.parse(savedWorkerStatus));
+      }
+
+      const savedSettlements =
+        await AsyncStorage.getItem('settlements');
+      if (savedSettlements) {
+        setSettlements(JSON.parse(savedSettlements));
+      }
+
     } catch (error) {
       console.log(error);
     }
@@ -257,6 +280,10 @@ export default function HomeScreen() {
     );
   };
 
+  const activeWorkers = workerStatus
+    .filter((w) => w.active)
+    .map((w) => w.name);
+
   const getWorkerTotal = (workerName: string) => {
     return transactions
       .filter((item) => item.worker === workerName)
@@ -271,6 +298,193 @@ export default function HomeScreen() {
     );
   }
 
+  // ── Workers Screen ──────────────────────────────
+  if (screen === 'workers') {
+    const toggleWorker = async (name: string) => {
+      const updated = workerStatus.map((w) =>
+        w.name === name
+          ? { ...w, active: !w.active }
+          : w
+      );
+      setWorkerStatus(updated);
+      await AsyncStorage.setItem(
+        'workerStatus',
+        JSON.stringify(updated)
+      );
+    };
+
+    const settleWorker = (name: string) => {
+      const alreadySettled = settlements.find(
+        (s) => s.worker === name
+      );
+      if (alreadySettled) {
+        Alert.alert(
+          'Already Settled',
+          `${name} is already settled today (₹${alreadySettled.amount} at ${alreadySettled.settledAt}).`
+        );
+        return;
+      }
+
+      const workerTransactions = transactions.filter(
+        (t) => t.worker === name
+      );
+
+      if (workerTransactions.length === 0) {
+        Alert.alert(
+          'No Transactions',
+          `${name} has no transactions today.`
+        );
+        return;
+      }
+
+      const breakdown = workerTransactions.map(
+        (t) => `${t.service}  ₹${t.amount}`
+      ).join('\n');
+
+      const total = workerTransactions.reduce(
+        (s, t) => s + t.amount, 0
+      );
+
+      const share = name === 'Owner' ? total : total / 2;
+
+      Alert.alert(
+        `Settle ${name}`,
+        `${breakdown}\n\nTotal: ₹${total}\nShare: ₹${share}`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: `Pay ₹${share}`,
+            onPress: async () => {
+              const now = new Date();
+              const newSettlement = {
+                worker: name,
+                amount: share,
+                settledAt: now.toLocaleTimeString(
+                  [], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: true,
+                  }
+                ),
+              };
+              const updated = [
+                ...settlements,
+                newSettlement,
+              ];
+              setSettlements(updated);
+              await AsyncStorage.setItem(
+                'settlements',
+                JSON.stringify(updated)
+              );
+              Alert.alert(
+                'Settled',
+                `${name} paid ₹${share} ✅`
+              );
+            },
+          },
+        ]
+      );
+    };
+
+    return (
+      <ScrollView style={styles.container}>
+        <Text style={styles.title}>👨 Workers</Text>
+
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => setScreen('dashboard')}>
+          <Text style={styles.buttonText}>
+            ← Back to Dashboard
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={styles.heading}>
+          Attendance
+        </Text>
+
+        {workerStatus.map((w) => {
+          const isSettled = settlements.some(
+            (s) => s.worker === w.name
+          );
+          return (
+            <View
+              key={w.name}
+              style={styles.workerAttendanceCard}>
+              <View>
+                <Text style={styles.workerAttendanceName}>
+                  {w.active ? '🟢' : '🔴'} {w.name}
+                </Text>
+                <Text style={styles.workerSettledBadge}>
+                  {isSettled ? '✅ Settled' : '⏳ Pending'}
+                </Text>
+              </View>
+              <View style={styles.workerActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.attendanceToggle,
+                    {
+                      backgroundColor: w.active
+                        ? '#d9534f'
+                        : '#28a745',
+                    },
+                  ]}
+                  onPress={() => toggleWorker(w.name)}>
+                  <Text style={styles.attendanceToggleText}>
+                    {w.active ? 'Mark Off' : 'Activate'}
+                  </Text>
+                </TouchableOpacity>
+                {w.name !== 'Owner' && (
+                  <TouchableOpacity
+                    style={[
+                      styles.settleButton,
+                      isSettled && {
+                        backgroundColor: '#999',
+                      },
+                    ]}
+                    disabled={isSettled}
+                    onPress={() =>
+                      settleWorker(w.name)
+                    }>
+                    <Text style={styles.attendanceToggleText}>
+                      {isSettled ? 'Paid' : '💰 Settle'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          );
+        })}
+
+        <Text style={styles.heading}>
+          Today's Settlements
+        </Text>
+
+        {settlements.length === 0 ? (
+          <Text style={styles.emptyText}>
+            No settlements yet
+          </Text>
+        ) : (
+          settlements.map((s, i) => (
+            <View key={i} style={styles.settlementCard}>
+              <View>
+                <Text style={styles.workerName}>
+                  {s.worker}
+                </Text>
+                <Text style={styles.reportSub}>
+                  {s.settledAt}
+                </Text>
+              </View>
+              <Text style={styles.reportAmount}>
+                ₹{s.amount}
+              </Text>
+            </View>
+          ))
+        )}
+      </ScrollView>
+    );
+  }
+
+  // ── Analytics Screen ─────────────────────────────
   if (screen === 'analytics') {
 
     const now = new Date();
@@ -702,7 +916,7 @@ export default function HomeScreen() {
         <Picker
           selectedValue={selectedWorker}
           onValueChange={(value) => setSelectedWorker(value)}>
-          {workers.map((worker) => (
+          {activeWorkers.map((worker) => (
             <Picker.Item key={worker} label={worker} value={worker} />
           ))}
         </Picker>
@@ -802,14 +1016,20 @@ export default function HomeScreen() {
       <TouchableOpacity
         style={[
           styles.button,
-          dayClosed && {
-            backgroundColor: '#999',
-          },
+          dayClosed && { backgroundColor: '#999' },
         ]}
         disabled={dayClosed}
         onPress={() => setScreen('transaction')}>
         <Text style={styles.buttonText}>
-          + Add Transaction
+          ➕ Add Transaction
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.workersButton}
+        onPress={() => setScreen('workers')}>
+        <Text style={styles.buttonText}>
+          👨 Workers & Settlements
         </Text>
       </TouchableOpacity>
 
@@ -841,9 +1061,18 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.startDayButton}
           onPress={async () => {
-            await AsyncStorage.removeItem(
-              'dayClosed'
+            await AsyncStorage.removeItem('dayClosed');
+            await AsyncStorage.removeItem('settlements');
+            const reset = workers.map((w) => ({
+              name: w,
+              active: true,
+            }));
+            setWorkerStatus(reset);
+            await AsyncStorage.setItem(
+              'workerStatus',
+              JSON.stringify(reset)
             );
+            setSettlements([]);
             setDayClosed(false);
           }}>
           <Text style={styles.buttonText}>
@@ -854,14 +1083,22 @@ export default function HomeScreen() {
 
       <Text style={styles.heading}>Worker Earnings</Text>
 
-      {workers.map((worker) => (
-        <View key={worker} style={styles.workerCard}>
-          <Text style={styles.workerName}>{worker}</Text>
-          <Text style={styles.workerAmount}>
-            ₹{getWorkerTotal(worker)}
-          </Text>
-        </View>
-      ))}
+      {workerStatus.map((w) => {
+        const isSettled = settlements.some(
+          (s) => s.worker === w.name
+        );
+        return (
+          <View key={w.name} style={styles.workerCard}>
+            <Text style={styles.workerName}>
+              {w.active ? '🟢' : '🔴'} {w.name}
+              {isSettled ? '  ✅' : ''}
+            </Text>
+            <Text style={styles.workerAmount}>
+              ₹{getWorkerTotal(w.name)}
+            </Text>
+          </View>
+        );
+      })}
 
       <Text style={styles.heading}>Recent Transactions</Text>
 
@@ -1023,6 +1260,59 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 10,
     marginBottom: 10,
+  },
+  workersButton: {
+    backgroundColor: '#e67e22',
+    padding: 16,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  workerAttendanceCard: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  workerAttendanceName: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  workerSettledBadge: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 3,
+  },
+  workerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  attendanceToggle: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  settleButton: {
+    backgroundColor: '#e67e22',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  attendanceToggleText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  settlementCard: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   startDayButton: {
     backgroundColor: '#28a745',
