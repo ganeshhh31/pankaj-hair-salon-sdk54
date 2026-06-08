@@ -36,7 +36,8 @@ export default function HomeScreen() {
   const [upiTotal, setUpiTotal] = useState(0);
   const [showCollection, setShowCollection] = useState(false);
   const [dayClosed, setDayClosed] = useState(false);
-const [reports, setReports] = useState<any[]>([]);
+  const [reports, setReports] = useState<any[]>([]);
+  const [selectedReport, setSelectedReport] = useState<any>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -163,6 +164,14 @@ const [reports, setReports] = useState<any[]>([]);
   };
 
   const closeDay = () => {
+    if (totalCollection === 0) {
+      Alert.alert(
+        'No Transactions',
+        'Add at least one transaction before closing the day.'
+      );
+      return;
+    }
+
     Alert.alert(
       'Close Day',
       `Today's Collection: ₹${totalCollection}\n\nCash: ₹${cashTotal}\nUPI: ₹${upiTotal}\n\nAre you sure you want to close the day?`,
@@ -187,8 +196,17 @@ const [reports, setReports] = useState<any[]>([]);
               };
             });
 
+            const now = new Date();
+
             const report = {
-              date: new Date().toLocaleDateString(),
+              date: now.toLocaleDateString(),
+              closedAt: now.toLocaleTimeString(
+                [], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: true,
+                }
+              ),
               totalCollection,
               cashTotal,
               upiTotal,
@@ -239,6 +257,166 @@ const [reports, setReports] = useState<any[]>([]);
       <View style={styles.loadingContainer}>
         <Text>Loading...</Text>
       </View>
+    );
+  }
+
+  if (screen === 'reports') {
+
+    // Detail view — user tapped a specific report
+    if (selectedReport) {
+      return (
+        <ScrollView style={styles.container}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setSelectedReport(null)}>
+            <Text style={styles.buttonText}>
+              ← Back to Reports
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={styles.title}>
+            📋 {selectedReport.date}
+            {selectedReport.closedAt
+              ? `\n${selectedReport.closedAt}`
+              : ''}
+          </Text>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>
+              Total Collection
+            </Text>
+            <Text style={styles.dashboardAmount}>
+              ₹{selectedReport.totalCollection}
+            </Text>
+            <Text style={styles.dashboardInfo}>
+              Cash : ₹{selectedReport.cashTotal}
+            </Text>
+            <Text style={styles.dashboardInfo}>
+              UPI : ₹{selectedReport.upiTotal}
+            </Text>
+          </View>
+
+          <Text style={styles.heading}>
+            Worker Earnings
+          </Text>
+
+          {selectedReport.workerReport.map(
+            (item: any) => (
+              <View
+                key={item.worker}
+                style={styles.workerCard}>
+                <Text style={styles.workerName}>
+                  {item.worker}
+                </Text>
+                <View>
+                  <Text style={styles.workerAmount}>
+                    Work: ₹{item.workDone}
+                  </Text>
+                  <Text style={styles.workerShare}>
+                    Share: ₹{item.share}
+                  </Text>
+                </View>
+              </View>
+            )
+          )}
+        </ScrollView>
+      );
+    }
+
+    // List view — all reports
+    return (
+      <ScrollView style={styles.container}>
+        <Text style={styles.title}>📈 Reports</Text>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            Total Closed Days
+          </Text>
+          <Text style={styles.dashboardAmount}>
+            {reports.length}
+          </Text>
+          <Text style={styles.dashboardInfo}>
+            Total Revenue : ₹{reports.reduce(
+              (sum, r) => sum + r.totalCollection, 0
+            )}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => setScreen('dashboard')}>
+          <Text style={styles.buttonText}>
+            ← Back to Dashboard
+          </Text>
+        </TouchableOpacity>
+
+        {reports.length === 0 ? (
+          <Text style={styles.emptyText}>
+            No reports yet. Close a day to generate one.
+          </Text>
+        ) : (
+          reports.map((report, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.reportCard}
+              onPress={() =>
+                setSelectedReport(report)
+              }>
+              <View>
+                <Text style={styles.reportDate}>
+                  {report.date}
+                </Text>
+                <Text style={styles.reportSub}>
+                  {report.closedAt
+                    ? `Closed at ${report.closedAt}`
+                    : ''}
+                </Text>
+                <Text style={styles.reportSub}>
+                  Cash ₹{report.cashTotal} • UPI ₹{report.upiTotal}
+                </Text>
+              </View>
+              <View style={styles.reportRight}>
+                <Text style={styles.reportAmount}>
+                  ₹{report.totalCollection}
+                </Text>
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => {
+                    Alert.alert(
+                      'Delete Report',
+                      `Delete report for ${report.date}?`,
+                      [
+                        {
+                          text: 'Cancel',
+                          style: 'cancel',
+                        },
+                        {
+                          text: 'Delete',
+                          style: 'destructive',
+                          onPress: async () => {
+                            const updated =
+                              reports.filter(
+                                (_, i) => i !== index
+                              );
+                            setReports(updated);
+                            await AsyncStorage.setItem(
+                              'reports',
+                              JSON.stringify(updated)
+                            );
+                          },
+                        },
+                      ]
+                    );
+                  }}>
+                  <Text style={styles.deleteText}>
+                    🗑
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
+      </ScrollView>
     );
   }
 
@@ -368,6 +546,14 @@ const [reports, setReports] = useState<any[]>([]);
         onPress={closeDay}>
         <Text style={styles.buttonText}>
           📊 Close Day
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.reportsButton}
+        onPress={() => setScreen('reports')}>
+        <Text style={styles.buttonText}>
+          📈 Reports
         </Text>
       </TouchableOpacity>
 
@@ -546,10 +732,60 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 10,
   },
+  reportsButton: {
+    backgroundColor: '#0066cc',
+    padding: 16,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
   startDayButton: {
     backgroundColor: '#28a745',
     padding: 16,
     borderRadius: 10,
     marginBottom: 20,
+  },
+  reportCard: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  reportRight: {
+    alignItems: 'flex-end',
+  },
+  deleteButton: {
+    marginTop: 6,
+    padding: 4,
+  },
+  deleteText: {
+    fontSize: 18,
+  },
+  reportDate: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  reportSub: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 3,
+  },
+  reportAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#28a745',
+  },
+  workerShare: {
+    fontSize: 13,
+    color: '#666',
+    textAlign: 'right',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 15,
+    marginTop: 40,
   },
 });
