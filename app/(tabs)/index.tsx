@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 
@@ -34,6 +35,8 @@ export default function HomeScreen() {
   const [cashTotal, setCashTotal] = useState(0);
   const [upiTotal, setUpiTotal] = useState(0);
   const [showCollection, setShowCollection] = useState(false);
+  const [dayClosed, setDayClosed] = useState(false);
+const [reports, setReports] = useState<any[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -71,6 +74,26 @@ export default function HomeScreen() {
         setTotalCollection(total);
         setCashTotal(cash);
         setUpiTotal(upi);
+      }
+
+      const savedReports =
+        await AsyncStorage.getItem(
+          'reports'
+        );
+
+      if (savedReports) {
+        setReports(
+          JSON.parse(savedReports)
+        );
+      }
+
+      const savedDayClosed =
+        await AsyncStorage.getItem(
+          'dayClosed'
+        );
+
+      if (savedDayClosed === 'true') {
+        setDayClosed(true);
       }
     } catch (error) {
       console.log(error);
@@ -137,6 +160,72 @@ export default function HomeScreen() {
     setPaymentMode('Cash');
 
     setScreen('dashboard');
+  };
+
+  const closeDay = () => {
+    Alert.alert(
+      'Close Day',
+      `Today's Collection: ₹${totalCollection}\n\nCash: ₹${cashTotal}\nUPI: ₹${upiTotal}\n\nAre you sure you want to close the day?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Close Day',
+          onPress: async () => {
+            const workerReport = workers.map((worker) => {
+              const workDone = getWorkerTotal(worker);
+
+              return {
+                worker,
+                workDone,
+                share:
+                  worker === 'Owner'
+                    ? workDone
+                    : workDone / 2,
+              };
+            });
+
+            const report = {
+              date: new Date().toLocaleDateString(),
+              totalCollection,
+              cashTotal,
+              upiTotal,
+              workerReport,
+            };
+
+            const updatedReports = [
+              report,
+              ...reports,
+            ];
+
+            setReports(updatedReports);
+
+            await AsyncStorage.setItem(
+              'reports',
+              JSON.stringify(updatedReports)
+            );
+
+            await AsyncStorage.removeItem(
+              'transactions'
+            );
+
+            setTransactions([]);
+            setTotalCollection(0);
+            setCashTotal(0);
+            setUpiTotal(0);
+
+            await AsyncStorage.setItem(
+              'dayClosed',
+              'true'
+            );
+
+            setDayClosed(true);
+          },
+        },
+      ]
+    );
   };
 
   const getWorkerTotal = (workerName: string) => {
@@ -261,12 +350,41 @@ export default function HomeScreen() {
       </View>
 
       <TouchableOpacity
-        style={styles.button}
+        style={[
+          styles.button,
+          dayClosed && {
+            backgroundColor: '#999',
+          },
+        ]}
+        disabled={dayClosed}
         onPress={() => setScreen('transaction')}>
         <Text style={styles.buttonText}>
           + Add Transaction
         </Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.closeDayButton}
+        onPress={closeDay}>
+        <Text style={styles.buttonText}>
+          📊 Close Day
+        </Text>
+      </TouchableOpacity>
+
+      {dayClosed && (
+        <TouchableOpacity
+          style={styles.startDayButton}
+          onPress={async () => {
+            await AsyncStorage.removeItem(
+              'dayClosed'
+            );
+            setDayClosed(false);
+          }}>
+          <Text style={styles.buttonText}>
+            🌅 Start New Day
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <Text style={styles.heading}>Worker Earnings</Text>
 
@@ -421,5 +539,17 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     marginBottom: 10,
+  },
+  closeDayButton: {
+    backgroundColor: '#d9534f',
+    padding: 16,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  startDayButton: {
+    backgroundColor: '#28a745',
+    padding: 16,
+    borderRadius: 10,
+    marginBottom: 20,
   },
 });
