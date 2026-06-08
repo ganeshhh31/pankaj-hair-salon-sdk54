@@ -31,21 +31,22 @@ export default function HomeScreen() {
 
   const [transactions, setTransactions] = useState<any[]>([]);
   const [totalCollection, setTotalCollection] = useState(0);
+  const [cashTotal, setCashTotal] = useState(0);
+  const [upiTotal, setUpiTotal] = useState(0);
+  const [showCollection, setShowCollection] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     loadTransactions();
-    
   }, []);
 
   const loadTransactions = async () => {
     try {
       const saved = await AsyncStorage.getItem('transactions');
 
-console.log('Loaded:', saved);
       if (saved) {
         const parsed = JSON.parse(saved);
-        console.log('Parsed:', parsed);
+
         setTransactions(parsed);
 
         const total = parsed.reduce(
@@ -53,7 +54,23 @@ console.log('Loaded:', saved);
           0
         );
 
+        const cash = parsed
+          .filter((item: any) => item.paymentMode === 'Cash')
+          .reduce(
+            (sum: number, item: any) => sum + item.amount,
+            0
+          );
+
+        const upi = parsed
+          .filter((item: any) => item.paymentMode === 'UPI')
+          .reduce(
+            (sum: number, item: any) => sum + item.amount,
+            0
+          );
+
         setTotalCollection(total);
+        setCashTotal(cash);
+        setUpiTotal(upi);
       }
     } catch (error) {
       console.log(error);
@@ -97,12 +114,19 @@ console.log('Loaded:', saved);
 
     setTotalCollection(updatedTotal);
 
+    if (paymentMode === 'Cash') {
+      setCashTotal(cashTotal + Number(amount));
+    }
+
+    if (paymentMode === 'UPI') {
+      setUpiTotal(upiTotal + Number(amount));
+    }
+
     try {
       await AsyncStorage.setItem(
         'transactions',
         JSON.stringify(updatedTransactions)
       );
-      console.log('Saved:', updatedTransactions);
     } catch (error) {
       console.log(error);
     }
@@ -200,8 +224,40 @@ console.log('Loaded:', saved);
       <Text style={styles.title}>💈 Pankaj Hair Salon</Text>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Today's Collection</Text>
-        <Text style={styles.amount}>₹{totalCollection}</Text>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>
+            Today's Collection
+          </Text>
+
+          <TouchableOpacity
+            onPress={() =>
+              setShowCollection(!showCollection)
+            }>
+            <Text style={styles.eyeIcon}>
+              {showCollection ? '🙈' : '👁'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.dashboardAmount}>
+          {showCollection
+            ? `₹${totalCollection}`
+            : '*****'}
+        </Text>
+
+        <Text style={styles.dashboardInfo}>
+          UPI :
+          {showCollection
+            ? ` ₹${upiTotal}`
+            : ' ***'}
+        </Text>
+
+        <Text style={styles.dashboardInfo}>
+          Cash :
+          {showCollection
+            ? ` ₹${cashTotal}`
+            : ' ****'}
+        </Text>
       </View>
 
       <TouchableOpacity
@@ -270,12 +326,30 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     padding: 20,
-    borderRadius: 12,
+    borderRadius: 20,
     marginBottom: 20,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  eyeIcon: {
+    fontSize: 22,
+  },
   cardTitle: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  dashboardAmount: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+  dashboardInfo: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginTop: 10,
   },
   amount: {
     fontSize: 32,
