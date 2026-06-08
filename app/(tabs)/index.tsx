@@ -198,8 +198,18 @@ export default function HomeScreen() {
 
             const now = new Date();
 
+            const serviceReport = services.map(
+              (service) => ({
+                service: service.name,
+                count: transactions.filter(
+                  (t) => t.service === service.name
+                ).length,
+              })
+            );
+
             const report = {
               date: now.toLocaleDateString(),
+              dateISO: now.toISOString(),
               closedAt: now.toLocaleTimeString(
                 [], {
                   hour: '2-digit',
@@ -211,6 +221,7 @@ export default function HomeScreen() {
               cashTotal,
               upiTotal,
               workerReport,
+              serviceReport,
             };
 
             const updatedReports = [
@@ -257,6 +268,267 @@ export default function HomeScreen() {
       <View style={styles.loadingContainer}>
         <Text>Loading...</Text>
       </View>
+    );
+  }
+
+  if (screen === 'analytics') {
+
+    const now = new Date();
+
+    // --- Weekly Revenue ---
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const weekReports = reports.filter((r) => {
+      const d = r.dateISO
+        ? new Date(r.dateISO)
+        : new Date(r.date);
+      return d >= startOfWeek;
+    });
+
+    const weekRevenue = weekReports.reduce(
+      (s, r) => s + r.totalCollection, 0
+    );
+    const weekCash = weekReports.reduce(
+      (s, r) => s + r.cashTotal, 0
+    );
+    const weekUPI = weekReports.reduce(
+      (s, r) => s + r.upiTotal, 0
+    );
+
+    // --- Monthly Revenue ---
+    const monthReports = reports.filter((r) => {
+      const d = r.dateISO
+        ? new Date(r.dateISO)
+        : new Date(r.date);
+      return (
+        d.getMonth() === now.getMonth() &&
+        d.getFullYear() === now.getFullYear()
+      );
+    });
+
+    const monthRevenue = monthReports.reduce(
+      (s, r) => s + r.totalCollection, 0
+    );
+    const monthCash = monthReports.reduce(
+      (s, r) => s + r.cashTotal, 0
+    );
+    const monthUPI = monthReports.reduce(
+      (s, r) => s + r.upiTotal, 0
+    );
+
+    // --- Best Worker (from all reports) ---
+    const workerTotals: { [key: string]: number } = {};
+    reports.forEach((r) => {
+      r.workerReport.forEach((w: any) => {
+        workerTotals[w.worker] =
+          (workerTotals[w.worker] || 0) + w.workDone;
+      });
+    });
+    const topWorkerName = Object.keys(workerTotals).sort(
+      (a, b) => workerTotals[b] - workerTotals[a]
+    )[0];
+    const topWorkerAmount = topWorkerName
+      ? workerTotals[topWorkerName]
+      : 0;
+
+    // --- Most Popular Service (historical from reports + today live) ---
+    const serviceCounts: { [key: string]: number } = {};
+
+    // count from all closed reports
+    reports.forEach((r) => {
+      if (r.serviceReport) {
+        r.serviceReport.forEach((s: any) => {
+          serviceCounts[s.service] =
+            (serviceCounts[s.service] || 0) + s.count;
+        });
+      }
+    });
+
+    // also add today's live transactions
+    transactions.forEach((t) => {
+      serviceCounts[t.service] =
+        (serviceCounts[t.service] || 0) + 1;
+    });
+
+    const topServiceName = Object.keys(serviceCounts).sort(
+      (a, b) => serviceCounts[b] - serviceCounts[a]
+    )[0];
+    const topServiceCount = topServiceName
+      ? serviceCounts[topServiceName]
+      : 0;
+
+    // --- Average Daily Revenue ---
+    const avgDaily =
+      reports.length > 0
+        ? Math.round(
+            reports.reduce(
+              (s, r) => s + r.totalCollection, 0
+            ) / reports.length
+          )
+        : 0;
+
+    // --- Last 7 Days Trend ---
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const last7: { label: string; amount: number }[] = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+
+      const nextDay = new Date(d);
+      nextDay.setDate(d.getDate() + 1);
+
+      const dayTotal = reports
+        .filter((r) => {
+          const rd = r.dateISO
+            ? new Date(r.dateISO)
+            : new Date(r.date);
+          return rd >= d && rd < nextDay;
+        })
+        .reduce((s, r) => s + r.totalCollection, 0);
+
+      last7.push({
+        label: dayNames[d.getDay()],
+        amount: dayTotal,
+      });
+    }
+
+    const maxTrend = Math.max(...last7.map((d) => d.amount), 1);
+
+    return (
+      <ScrollView style={styles.container}>
+        <Text style={styles.title}>📊 Analytics</Text>
+
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => setScreen('dashboard')}>
+          <Text style={styles.buttonText}>
+            ← Back to Dashboard
+          </Text>
+        </TouchableOpacity>
+
+        {/* Weekly Revenue */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            This Week
+          </Text>
+          <Text style={styles.dashboardAmount}>
+            ₹{weekRevenue}
+          </Text>
+          <Text style={styles.dashboardInfo}>
+            Cash : ₹{weekCash}
+          </Text>
+          <Text style={styles.dashboardInfo}>
+            UPI : ₹{weekUPI}
+          </Text>
+        </View>
+
+        {/* Monthly Revenue */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            This Month
+          </Text>
+          <Text style={styles.dashboardAmount}>
+            ₹{monthRevenue}
+          </Text>
+          <Text style={styles.dashboardInfo}>
+            Cash : ₹{monthCash}
+          </Text>
+          <Text style={styles.dashboardInfo}>
+            UPI : ₹{monthUPI}
+          </Text>
+        </View>
+
+        {/* Best Worker */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            🏆 Top Worker
+          </Text>
+          {topWorkerName ? (
+            <>
+              <Text style={styles.dashboardAmount}>
+                {topWorkerName}
+              </Text>
+              <Text style={styles.dashboardInfo}>
+                ₹{topWorkerAmount} earned
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.emptyText}>
+              No data yet
+            </Text>
+          )}
+        </View>
+
+        {/* Most Popular Service */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            ✂️ Top Service
+          </Text>
+          {topServiceName ? (
+            <>
+              <Text style={styles.dashboardAmount}>
+                {topServiceName}
+              </Text>
+              <Text style={styles.dashboardInfo}>
+                {topServiceCount} times
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.emptyText}>
+              No data yet
+            </Text>
+          )}
+        </View>
+
+        {/* Average Daily Revenue */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            📅 Avg Per Day
+          </Text>
+          <Text style={styles.dashboardAmount}>
+            ₹{avgDaily}
+          </Text>
+          <Text style={styles.dashboardInfo}>
+            Over {reports.length} closed days
+          </Text>
+        </View>
+
+        {/* Last 7 Days Trend */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            Last 7 Days
+          </Text>
+          {last7.map((day, i) => (
+            <View key={i} style={styles.trendRow}>
+              <Text style={styles.trendLabel}>
+                {day.label}
+              </Text>
+              <View style={styles.trendBarBg}>
+                <View
+                  style={[
+                    styles.trendBarFill,
+                    {
+                      width: `${Math.round(
+                        (day.amount / maxTrend) * 100
+                      )}%`,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.trendAmount}>
+                {day.amount > 0
+                  ? `₹${day.amount}`
+                  : '-'}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+      </ScrollView>
     );
   }
 
@@ -557,6 +829,14 @@ export default function HomeScreen() {
         </Text>
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={styles.analyticsButton}
+        onPress={() => setScreen('analytics')}>
+        <Text style={styles.buttonText}>
+          📊 Analytics
+        </Text>
+      </TouchableOpacity>
+
       {dayClosed && (
         <TouchableOpacity
           style={styles.startDayButton}
@@ -738,6 +1018,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 10,
   },
+  analyticsButton: {
+    backgroundColor: '#6f42c1',
+    padding: 16,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
   startDayButton: {
     backgroundColor: '#28a745',
     padding: 16,
@@ -787,5 +1073,36 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 15,
     marginTop: 40,
+  },
+  trendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  trendLabel: {
+    width: 36,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#444',
+  },
+  trendBarBg: {
+    flex: 1,
+    height: 14,
+    backgroundColor: '#eee',
+    borderRadius: 7,
+    marginHorizontal: 8,
+    overflow: 'hidden',
+  },
+  trendBarFill: {
+    height: 14,
+    backgroundColor: '#6f42c1',
+    borderRadius: 7,
+  },
+  trendAmount: {
+    width: 64,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'right',
   },
 });
