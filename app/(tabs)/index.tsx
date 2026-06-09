@@ -11,9 +11,14 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 
-export default function HomeScreen() {
-  const workers = ['Owner', 'Gotu', 'Sanjay', 'Pintu', 'Ajit', 'Abhijit'];
+// Worker type definition
+interface Worker {
+  id: string;
+  name: string;
+  active: boolean;
+}
 
+export default function HomeScreen() {
   const services = [
     { name: 'Hair Cut', price: 150 },
     { name: 'Beard', price: 80 },
@@ -33,7 +38,7 @@ export default function HomeScreen() {
   const [screen, setScreen] = useState('home');
   const [activeTab, setActiveTab] = useState('home');
 
-  const [selectedWorker, setSelectedWorker] = useState('Owner');
+  const [selectedWorker, setSelectedWorker] = useState('');
   const [selectedService, setSelectedService] = useState('Hair Cut');
   const [amount, setAmount] = useState('150');
   const [paymentMode, setPaymentMode] = useState('Cash');
@@ -48,8 +53,9 @@ export default function HomeScreen() {
   const [selectedReport, setSelectedReport] = useState<any>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const defaultWorkerStatus = workers.map((w) => ({ name: w, active: true }));
-  const [workerStatus, setWorkerStatus] = useState<{ name: string; active: boolean }[]>(defaultWorkerStatus);
+  // V8.5 - Dynamic workers
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [newWorkerName, setNewWorkerName] = useState('');
   const [settlements, setSettlements] = useState<any[]>([]);
 
   // V8 — Expenses
@@ -62,8 +68,155 @@ export default function HomeScreen() {
     loadAllData();
   }, []);
 
+  // V8.5 - Initialize default workers if none exist
+  const initializeDefaultWorkers = async () => {
+    const defaultWorkers: Worker[] = [
+      { id: '1', name: 'Pankaj', active: true },
+      { id: '2', name: 'Rohit', active: true },
+      { id: '3', name: 'Amit', active: true },
+    ];
+    
+    await AsyncStorage.setItem('workers', JSON.stringify(defaultWorkers));
+    return defaultWorkers;
+  };
+
+  // V8.5 - Add new worker
+  const addWorker = async () => {
+    // Validate name
+    if (!newWorkerName.trim()) {
+      Alert.alert('Error', 'Worker name cannot be empty');
+      return;
+    }
+
+    // Check for duplicates
+    const nameExists = workers.some(
+      w => w.name.toLowerCase() === newWorkerName.trim().toLowerCase()
+    );
+    
+    if (nameExists) {
+      Alert.alert('Error', 'A worker with this name already exists');
+      return;
+    }
+
+    const newWorker: Worker = {
+      id: Date.now().toString(),
+      name: newWorkerName.trim(),
+      active: true,
+    };
+
+    const updatedWorkers = [...workers, newWorker];
+    setWorkers(updatedWorkers);
+    await AsyncStorage.setItem('workers', JSON.stringify(updatedWorkers));
+
+    // Clear input
+    setNewWorkerName('');
+    Alert.alert('Success', `${newWorker.name} added successfully`);
+  };
+
+  // V8.5 - Deactivate worker (soft delete)
+  const deactivateWorker = async (workerId: string, workerName: string) => {
+    // FIX #3: Prevent deactivating last active worker
+    const activeCount = workers.filter(w => w.active).length;
+    
+    if (activeCount === 1 && workers.find(w => w.id === workerId)?.active) {
+      Alert.alert(
+        "Cannot Deactivate",
+        "At least one worker must remain active. Please add another worker before deactivating this one."
+      );
+      return;
+    }
+
+    // Check if worker has transactions today
+    const hasTransactions = transactions.some(t => t.worker === workerName);
+    if (hasTransactions) {
+      Alert.alert(
+        'Cannot Deactivate',
+        `${workerName} has transactions today. Please close the day first before deactivating.`
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Deactivate Worker',
+      `Are you sure you want to deactivate ${workerName}?\n\nDeactivated workers will not appear in worker selection dropdowns but will remain in historical reports.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Deactivate',
+          style: 'destructive',
+          onPress: async () => {
+            const updatedWorkers = workers.map(w => 
+              w.id === workerId ? { ...w, active: false } : w
+            );
+            setWorkers(updatedWorkers);
+            await AsyncStorage.setItem('workers', JSON.stringify(updatedWorkers));
+
+            // If deactivated worker was selected, reset selection
+            if (selectedWorker === workerName) {
+              const activeWorkersList = updatedWorkers.filter(w => w.active);
+              setSelectedWorker(activeWorkersList.length > 0 ? activeWorkersList[0].name : '');
+            }
+
+            Alert.alert('Success', `${workerName} has been deactivated`);
+          },
+        },
+      ]
+    );
+  };
+
+  // V8.5 - Reactivate worker
+  const reactivateWorker = async (workerId: string, workerName: string) => {
+    Alert.alert(
+      'Reactivate Worker',
+      `Reactivate ${workerName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reactivate',
+          onPress: async () => {
+            const updatedWorkers = workers.map(w => 
+              w.id === workerId ? { ...w, active: true } : w
+            );
+            setWorkers(updatedWorkers);
+            await AsyncStorage.setItem('workers', JSON.stringify(updatedWorkers));
+            Alert.alert('Success', `${workerName} has been reactivated`);
+          },
+        },
+      ]
+    );
+  };
+
   const loadAllData = async () => {
     try {
+      // V8.5 - Load workers with migration fix
+      let savedWorkers = await AsyncStorage.getItem('workers');
+      let loadedWorkers: Worker[] = [];
+
+      if (!savedWorkers) {
+        // First launch - create default workers
+        loadedWorkers = await initializeDefaultWorkers();
+      } else {
+        // FIX #1: Migration for existing V8 users
+        const parsedWorkers = JSON.parse(savedWorkers);
+        loadedWorkers = parsedWorkers.map((w: any) => ({
+          id: w.id || Date.now().toString() + Math.random(), // Handle old format without id
+          name: w.name || w, // Handle old format where worker was just a string
+          active: w.active ?? true, // Default to active if property doesn't exist
+        }));
+        
+        // Save migrated data back to storage
+        await AsyncStorage.setItem('workers', JSON.stringify(loadedWorkers));
+      }
+
+      setWorkers(loadedWorkers);
+      
+      // Set default selected worker (first active worker)
+      const activeWorkersList = loadedWorkers.filter(w => w.active);
+      if (activeWorkersList.length > 0 && !selectedWorker) {
+        setSelectedWorker(activeWorkersList[0].name);
+      }
+
+      // Load transactions
       const saved = await AsyncStorage.getItem('transactions');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -81,9 +234,6 @@ export default function HomeScreen() {
 
       const savedDayClosed = await AsyncStorage.getItem('dayClosed');
       if (savedDayClosed === 'true') setDayClosed(true);
-
-      const savedWorkerStatus = await AsyncStorage.getItem('workerStatus');
-      if (savedWorkerStatus) setWorkerStatus(JSON.parse(savedWorkerStatus));
 
       const savedSettlements = await AsyncStorage.getItem('settlements');
       if (savedSettlements) setSettlements(JSON.parse(savedSettlements));
@@ -128,7 +278,8 @@ export default function HomeScreen() {
       console.log(error);
     }
 
-    setSelectedWorker('Owner');
+    const activeWorkersList = workers.filter(w => w.active);
+    setSelectedWorker(activeWorkersList.length > 0 ? activeWorkersList[0].name : '');
     setSelectedService('Hair Cut');
     setAmount('150');
     setPaymentMode('Cash');
@@ -231,9 +382,10 @@ export default function HomeScreen() {
         {
           text: 'Close Day',
           onPress: async () => {
+            // Use all workers (including inactive) for historical accuracy
             const workerReport = workers.map((worker) => {
-              const workDone = getWorkerTotal(worker);
-              return { worker, workDone, share: worker === 'Owner' ? workDone : workDone / 2 };
+              const workDone = getWorkerTotal(worker.name);
+              return { worker: worker.name, workDone, share: worker.name === 'Pankaj' ? workDone : workDone / 2 };
             });
 
             const now = new Date();
@@ -242,7 +394,6 @@ export default function HomeScreen() {
               count: transactions.filter((t) => t.service === service.name).length,
             }));
 
-            // V8 — include expenses & profit in report
             const report = {
               date: now.toLocaleDateString(),
               dateISO: now.toISOString(),
@@ -276,14 +427,12 @@ export default function HomeScreen() {
   const startNewDay = async () => {
     await AsyncStorage.removeItem('dayClosed');
     await AsyncStorage.removeItem('settlements');
-    const reset = workers.map((w) => ({ name: w, active: true }));
-    setWorkerStatus(reset);
-    await AsyncStorage.setItem('workerStatus', JSON.stringify(reset));
     setSettlements([]);
     setDayClosed(false);
   };
 
-  const activeWorkers = workerStatus.filter((w) => w.active).map((w) => w.name);
+  // V8.5 - Get active workers only (for dropdowns)
+  const activeWorkers = workers.filter(w => w.active).map(w => w.name);
 
   const getWorkerTotal = (workerName: string) => {
     return transactions.filter((item) => item.worker === workerName).reduce((sum, item) => sum + item.amount, 0);
@@ -328,6 +477,26 @@ export default function HomeScreen() {
 
   // ── Add Transaction Screen ───────────────────────
   if (screen === 'transaction') {
+    if (activeWorkers.length === 0) {
+      return (
+        <View style={styles.screenWrapper}>
+          <ScrollView style={styles.container}>
+            <Text style={styles.title}>➕ Add Transaction</Text>
+            <View style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateText}>No active workers found</Text>
+              <Text style={styles.emptyStateSubText}>Please add workers in Workers section first</Text>
+            </View>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigateTo('workers')}>
+              <Text style={styles.buttonText}>Go to Workers</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigateTo('home')}>
+              <Text style={styles.buttonText}>← Back</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.screenWrapper}>
         <ScrollView style={styles.container}>
@@ -386,7 +555,7 @@ export default function HomeScreen() {
         <ScrollView style={styles.container}>
           <Text style={styles.title}>💰 Expenses</Text>
 
-          {/* Profit Cards — owner only */}
+          {/* Profit Cards */}
           <View style={[styles.card, { backgroundColor: todayProfit >= 0 ? '#e8f5e9' : '#fdecea' }]}>
             <Text style={styles.cardTitle}>Today's Profit</Text>
             <Text style={[styles.dashboardAmount, { color: todayProfit >= 0 ? '#2e7d32' : '#c62828' }]}>
@@ -481,14 +650,8 @@ export default function HomeScreen() {
     );
   }
 
-  // ── Workers Screen ───────────────────────────────
+  // ── Workers Screen (Pure Management) ──
   if (screen === 'workers') {
-    const toggleWorker = async (name: string) => {
-      const updated = workerStatus.map((w) => w.name === name ? { ...w, active: !w.active } : w);
-      setWorkerStatus(updated);
-      await AsyncStorage.setItem('workerStatus', JSON.stringify(updated));
-    };
-
     const settleWorker = (name: string) => {
       const alreadySettled = settlements.find((s) => s.worker === name);
       if (alreadySettled) {
@@ -504,7 +667,7 @@ export default function HomeScreen() {
 
       const breakdown = workerTransactions.map((t) => `${t.service}  ₹${t.amount}`).join('\n');
       const total = workerTransactions.reduce((s, t) => s + t.amount, 0);
-      const share = name === 'Owner' ? total : total / 2;
+      const share = name === 'Pankaj' ? total : total / 2;
 
       Alert.alert(
         `Settle ${name}`,
@@ -530,54 +693,115 @@ export default function HomeScreen() {
       );
     };
 
+    // FIX #6: Calculate active/inactive counts
+    const activeCount = workers.filter(w => w.active).length;
+    const inactiveCount = workers.filter(w => !w.active).length;
+    
+    // FIX #5: Sort workers - active first, then inactive
+    const sortedWorkers = [...workers].sort((a, b) => {
+      if (a.active === b.active) return a.name.localeCompare(b.name);
+      return a.active ? -1 : 1;
+    });
+
     return (
       <View style={styles.screenWrapper}>
         <ScrollView style={styles.container}>
-          <Text style={styles.title}>👨 Workers</Text>
+          <Text style={styles.title}>👨 Worker Management</Text>
 
-          <Text style={styles.sectionHeading}>Today's Earnings</Text>
-          {workerStatus.map((w) => {
-            const isSettled = settlements.some((s) => s.worker === w.name);
-            const earned = getWorkerTotal(w.name);
-            return (
-              <View key={w.name} style={styles.workerCard}>
-                <View>
-                  <Text style={styles.workerName}>{w.active ? '🟢' : '🔴'} {w.name}</Text>
-                  <Text style={styles.workerSubText}>{isSettled ? '✅ Settled' : '⏳ Pending'}</Text>
-                </View>
-                <Text style={styles.workerAmount}>₹{earned}</Text>
-              </View>
-            );
-          })}
+          {/* FIX #6: Worker Count Summary */}
+          <View style={styles.statsCard}>
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>{activeCount}</Text>
+              <Text style={styles.statLabel}>Active Workers</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>{inactiveCount}</Text>
+              <Text style={styles.statLabel}>Inactive Workers</Text>
+            </View>
+          </View>
 
-          <Text style={styles.sectionHeading}>Attendance</Text>
-          {workerStatus.map((w) => {
-            const isSettled = settlements.some((s) => s.worker === w.name);
-            return (
-              <View key={w.name} style={styles.workerAttendanceCard}>
-                <View>
-                  <Text style={styles.workerAttendanceName}>{w.active ? '🟢' : '🔴'} {w.name}</Text>
-                  <Text style={styles.workerSettledBadge}>{isSettled ? '✅ Settled' : '⏳ Pending'}</Text>
-                </View>
-                <View style={styles.workerActions}>
-                  <TouchableOpacity
-                    style={[styles.attendanceToggle, { backgroundColor: w.active ? '#d9534f' : '#28a745' }]}
-                    onPress={() => toggleWorker(w.name)}>
-                    <Text style={styles.attendanceToggleText}>{w.active ? 'Mark Off' : 'Activate'}</Text>
-                  </TouchableOpacity>
-                  {w.name !== 'Owner' && (
-                    <TouchableOpacity
-                      style={[styles.settleButton, isSettled && { backgroundColor: '#999' }]}
-                      disabled={isSettled}
-                      onPress={() => settleWorker(w.name)}>
-                      <Text style={styles.attendanceToggleText}>{isSettled ? 'Paid' : '💰 Settle'}</Text>
-                    </TouchableOpacity>
+          {/* Add Worker Form */}
+          <View style={styles.addWorkerCard}>
+            <Text style={styles.cardTitle}>➕ Add New Worker</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter worker name"
+              value={newWorkerName}
+              onChangeText={setNewWorkerName}
+              placeholderTextColor="#aaa"
+            />
+            <TouchableOpacity style={styles.saveButton} onPress={addWorker}>
+              <Text style={styles.buttonText}>Save Worker</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Workers List */}
+          <Text style={styles.sectionHeading}>Workers List</Text>
+          
+          {workers.length === 0 ? (
+            <View style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateText}>No workers found</Text>
+              <Text style={styles.emptyStateSubText}>Add a worker to continue</Text>
+            </View>
+          ) : (
+            sortedWorkers.map((worker, index) => {
+              const isSettled = settlements.some((s) => s.worker === worker.name);
+              const isActive = worker.active;
+              
+              // FIX #5: Add separator between active and inactive sections
+              const showSeparator = !isActive && index > 0 && sortedWorkers[index - 1].active;
+              
+              return (
+                <React.Fragment key={worker.id}>
+                  {showSeparator && (
+                    <View style={styles.separator}>
+                      <Text style={styles.separatorText}>Inactive Workers</Text>
+                    </View>
                   )}
-                </View>
-              </View>
-            );
-          })}
+                  <View style={styles.workerManagementCard}>
+                    <View style={styles.workerInfo}>
+                      <Text style={styles.workerName}>
+                        {worker.name}
+                        {!isActive && <Text style={styles.inactiveBadge}> (Inactive)</Text>}
+                      </Text>
+                      <Text style={styles.workerSubText}>
+                        {isSettled ? '✅ Settled today' : '⏳ Pending settlement'}
+                      </Text>
+                    </View>
+                    <View style={styles.workerActionsRow}>
+                      {/* FIX #4: Only show settlement button for active workers */}
+                      {isActive && worker.name !== 'Pankaj' && (
+                        <TouchableOpacity
+                          style={[styles.settleButton, isSettled && { backgroundColor: '#999' }]}
+                          disabled={isSettled}
+                          onPress={() => settleWorker(worker.name)}>
+                          <Text style={styles.actionButtonText}>
+                            {isSettled ? 'Paid' : '💰 Settle'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                      {isActive ? (
+                        <TouchableOpacity
+                          style={styles.deactivateButton}
+                          onPress={() => deactivateWorker(worker.id, worker.name)}>
+                          <Text style={styles.actionButtonText}>🔴 Deactivate</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.reactivateButton}
+                          onPress={() => reactivateWorker(worker.id, worker.name)}>
+                          <Text style={styles.actionButtonText}>🟢 Reactivate</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                </React.Fragment>
+              );
+            })
+          )}
 
+          {/* Today's Settlements */}
           <Text style={styles.sectionHeading}>Today's Settlements</Text>
           {settlements.length === 0 ? (
             <Text style={styles.emptyText}>No settlements yet</Text>
@@ -622,7 +846,6 @@ export default function HomeScreen() {
     const monthCash = monthReports.reduce((s, r) => s + r.cashTotal, 0);
     const monthUPI = monthReports.reduce((s, r) => s + r.upiTotal, 0);
 
-    // V8 — Weekly & Monthly Expenses
     const weekExpenses = expenses.filter((e) => {
       const d = e.dateISO ? new Date(e.dateISO) : new Date(e.date);
       return d >= startOfWeek;
@@ -771,7 +994,7 @@ export default function HomeScreen() {
               <Text style={styles.dashboardInfo}>UPI : ₹{selectedReport.upiTotal}</Text>
             </View>
 
-            {/* Expenses & Profit — V8 */}
+            {/* Expenses & Profit */}
             {selectedReport.totalExpenses !== undefined && (
               <View style={[styles.card, { backgroundColor: (selectedReport.profit ?? 0) >= 0 ? '#e8f5e9' : '#fdecea' }]}>
                 <Text style={styles.cardTitle}>Expenses & Profit</Text>
@@ -914,22 +1137,24 @@ export default function HomeScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.addTransactionButton, dayClosed && { backgroundColor: '#999' }]}
-          disabled={dayClosed}
+          style={[styles.addTransactionButton, (dayClosed || activeWorkers.length === 0) && { backgroundColor: '#999' }]}
+          disabled={dayClosed || activeWorkers.length === 0}
           onPress={() => setScreen('transaction')}>
-          <Text style={styles.addTransactionText}>➕ Add Transaction</Text>
+          <Text style={styles.addTransactionText}>
+            {activeWorkers.length === 0 ? '⚠️ No Workers Available' : '➕ Add Transaction'}
+          </Text>
         </TouchableOpacity>
 
         <Text style={styles.sectionHeading}>Worker Earnings</Text>
-        {workerStatus.map((w) => {
-          const isSettled = settlements.some((s) => s.worker === w.name);
+        {workers.filter(w => w.active).map((worker) => {
+          const isSettled = settlements.some((s) => s.worker === worker.name);
           return (
-            <View key={w.name} style={styles.workerCard}>
+            <View key={worker.id} style={styles.workerCard}>
               <Text style={styles.workerName}>
-                {w.active ? '🟢' : '🔴'} {w.name}
+                {worker.name}
                 {isSettled ? '  ✅' : ''}
               </Text>
-              <Text style={styles.workerAmount}>₹{getWorkerTotal(w.name)}</Text>
+              <Text style={styles.workerAmount}>₹{getWorkerTotal(worker.name)}</Text>
             </View>
           );
         })}
@@ -1144,6 +1369,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  inactiveBadge: {
+    color: '#999',
+    fontStyle: 'italic',
+  },
   workerSubText: {
     fontSize: 12,
     color: '#888',
@@ -1154,43 +1383,110 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#28a745',
   },
-  workerAttendanceCard: {
+  
+  // V8.5 - Worker Management Styles
+  statsCard: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  statBox: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statNumber: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#e0e0e0',
+  },
+  addWorkerCard: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 20,
+  },
+  workerManagementCard: {
     backgroundColor: '#fff',
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
-  workerAttendanceName: {
-    fontSize: 15,
-    fontWeight: '700',
+  workerInfo: {
+    marginBottom: 10,
   },
-  workerSettledBadge: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 3,
-  },
-  workerActions: {
+  workerActionsRow: {
     flexDirection: 'row',
     gap: 8,
-  },
-  attendanceToggle: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    marginTop: 8,
   },
   settleButton: {
     backgroundColor: '#e67e22',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
+    flex: 1,
   },
-  attendanceToggleText: {
+  deactivateButton: {
+    backgroundColor: '#d9534f',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    flex: 1,
+  },
+  reactivateButton: {
+    backgroundColor: '#28a745',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    flex: 1,
+  },
+  actionButtonText: {
     color: '#fff',
     fontWeight: '600',
     fontSize: 13,
+    textAlign: 'center',
+  },
+  separator: {
+    marginTop: 16,
+    marginBottom: 8,
+    paddingHorizontal: 8,
+  },
+  separatorText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#999',
+    letterSpacing: 0.5,
+  },
+  emptyStateCard: {
+    backgroundColor: '#fff',
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#999',
+    marginBottom: 8,
+  },
+  emptyStateSubText: {
+    fontSize: 14,
+    color: '#bbb',
   },
   settlementCard: {
     backgroundColor: '#fff',
@@ -1301,6 +1597,7 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#fff',
     fontSize: 16,
+    marginBottom: 12,
   },
 
   // ── Trend Chart ──────────────────────────────────
