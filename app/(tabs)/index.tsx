@@ -8,6 +8,7 @@ import {
   TextInput,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 
@@ -18,29 +19,128 @@ interface Worker {
   active: boolean;
 }
 
+// V8.6 - Service type definition
+interface Service {
+  id: string;
+  name: string;
+  price: number;
+}
+
+// Service Modal Component - MOVED OUTSIDE to prevent re-renders
+const ServiceModalComponent = ({ 
+  visible, 
+  onClose, 
+  onSave, 
+  editingService 
+}: { 
+  visible: boolean; 
+  onClose: () => void; 
+  onSave: (name: string, price: number) => void;
+  editingService: Service | null;
+}) => {
+  const [serviceFormName, setServiceFormName] = useState('');
+  const [serviceFormPrice, setServiceFormPrice] = useState('');
+
+  // Reset form when modal opens or editing service changes
+  React.useEffect(() => {
+    if (visible) {
+      if (editingService) {
+        setServiceFormName(editingService.name);
+        setServiceFormPrice(editingService.price.toString());
+      } else {
+        setServiceFormName('');
+        setServiceFormPrice('');
+      }
+    }
+  }, [visible, editingService]);
+
+  const handleSave = () => {
+    const price = parseFloat(serviceFormPrice);
+    if (!serviceFormName.trim()) {
+      Alert.alert('Error', 'Service name cannot be empty');
+      return;
+    }
+    if (isNaN(price) || price <= 0) {
+      Alert.alert('Error', 'Price must be greater than 0');
+      return;
+    }
+    onSave(serviceFormName.trim(), price);
+    setServiceFormName('');
+    setServiceFormPrice('');
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>
+            {editingService ? '✏️ Edit Service' : '➕ Add New Service'}
+          </Text>
+          
+          <Text style={styles.label}>Service Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Hair Spa"
+            value={serviceFormName}
+            onChangeText={setServiceFormName}
+            placeholderTextColor="#aaa"
+            autoFocus={true}
+          />
+          
+          <Text style={styles.label}>Price (₹)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. 800"
+            value={serviceFormPrice}
+            onChangeText={setServiceFormPrice}
+            keyboardType="numeric"
+            placeholderTextColor="#aaa"
+          />
+          
+          <View style={styles.modalButtons}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.cancelButton]}
+              onPress={onClose}>
+              <Text style={styles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.saveButton]}
+              onPress={handleSave}>
+              <Text style={styles.buttonText}>
+                {editingService ? 'Update' : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 export default function HomeScreen() {
-  const services = [
-    { name: 'Hair Cut', price: 150 },
-    { name: 'Beard', price: 80 },
-    { name: 'Facial', price: 500 },
-    { name: 'Bleach', price: 300 },
-    { name: 'Hair Treatment', price: 700 },
-    { name: 'Hair Color', price: 600 },
-    { name: 'Head Massage', price: 200 },
-  ];
+  // V8.6 - Dynamic services
+  const [services, setServices] = useState<Service[]>([]);
+  const [selectedService, setSelectedService] = useState('');
+  const [amount, setAmount] = useState('');
+  
+  // V8.6 - Service Management Modal state
+  const [serviceModalVisible, setServiceModalVisible] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
 
   const expenseCategories = [
     'Rent', 'Electricity', 'Products', 'Salary',
     'Maintenance', 'Water', 'Internet', 'Tea & Snacks', 'Other',
   ];
 
-  // screen values: 'home' | 'workers' | 'reports' | 'analytics' | 'expenses' | 'transaction'
+  // screen values: 'home' | 'workers' | 'reports' | 'analytics' | 'expenses' | 'transaction' | 'services'
   const [screen, setScreen] = useState('home');
   const [activeTab, setActiveTab] = useState('home');
 
   const [selectedWorker, setSelectedWorker] = useState('');
-  const [selectedService, setSelectedService] = useState('Hair Cut');
-  const [amount, setAmount] = useState('150');
   const [paymentMode, setPaymentMode] = useState('Cash');
 
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -68,6 +168,158 @@ export default function HomeScreen() {
     loadAllData();
   }, []);
 
+  // V8.6 - Initialize default services if none exist
+  const initializeDefaultServices = async () => {
+    const defaultServices: Service[] = [
+      { id: '1', name: 'Hair Cut', price: 150 },
+      { id: '2', name: 'Beard', price: 80 },
+      { id: '3', name: 'Facial', price: 500 },
+      { id: '4', name: 'Bleach', price: 300 },
+      { id: '5', name: 'Hair Treatment', price: 700 },
+      { id: '6', name: 'Hair Color', price: 600 },
+      { id: '7', name: 'Head Massage', price: 200 },
+    ];
+    
+    await AsyncStorage.setItem('services', JSON.stringify(defaultServices));
+    return defaultServices;
+  };
+
+  // V8.6 - Add new service
+  const addService = async (name: string, price: number) => {
+    // Check for duplicates
+    const nameExists = services.some(
+      s => s.name.toLowerCase() === name.toLowerCase()
+    );
+    
+    if (nameExists) {
+      Alert.alert('Error', 'A service with this name already exists');
+      return;
+    }
+
+    const newService: Service = {
+      id: Date.now().toString(),
+      name: name,
+      price: price,
+    };
+
+    const updatedServices = [...services, newService];
+    setServices(updatedServices);
+    await AsyncStorage.setItem('services', JSON.stringify(updatedServices));
+    Alert.alert('Success', `${newService.name} added successfully`);
+  };
+
+  // V8.6 - Edit service
+  const editService = async (name: string, price: number) => {
+    if (!editingService) return;
+
+    // Check for duplicates (excluding current service)
+    const nameExists = services.some(
+      s => s.id !== editingService.id && 
+      s.name.toLowerCase() === name.toLowerCase()
+    );
+    
+    if (nameExists) {
+      Alert.alert('Error', 'A service with this name already exists');
+      return;
+    }
+
+    const updatedServices = services.map(s =>
+      s.id === editingService.id
+        ? { ...s, name: name, price: price }
+        : s
+    );
+    
+    setServices(updatedServices);
+    await AsyncStorage.setItem('services', JSON.stringify(updatedServices));
+
+    // Update selected service if it was edited
+    if (selectedService === editingService.name) {
+      setSelectedService(name);
+      setAmount(price.toString());
+    }
+
+    Alert.alert('Success', `${name} updated successfully`);
+  };
+
+  // V8.6 - Delete service with last service protection
+  const deleteService = async (serviceId: string, serviceName: string) => {
+    // Prevent deleting last service
+    if (services.length === 1) {
+      Alert.alert(
+        "Cannot Delete",
+        "At least one service must remain. Add a new service before deleting this one."
+      );
+      return;
+    }
+
+    // Check if service appears in any historical report
+    const serviceInReports = reports.some(report => 
+      report.serviceReport?.some((s: any) => s.service === serviceName)
+    );
+
+    let warningMessage = `Delete ${serviceName}?`;
+    if (serviceInReports) {
+      warningMessage += `\n\n⚠️ This service appears in historical reports. Deleting it will not affect existing reports, but it will be removed from future transactions.`;
+    }
+
+    Alert.alert(
+      'Delete Service',
+      warningMessage,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const updatedServices = services.filter(s => s.id !== serviceId);
+            setServices(updatedServices);
+            await AsyncStorage.setItem('services', JSON.stringify(updatedServices));
+
+            // If deleted service was selected, reset selection
+            if (selectedService === serviceName) {
+              if (updatedServices.length > 0) {
+                handleServiceChange(updatedServices[0].name, updatedServices[0].price);
+              } else {
+                setSelectedService('');
+                setAmount('');
+              }
+            }
+
+            Alert.alert('Success', `${serviceName} deleted successfully`);
+          },
+        },
+      ]
+    );
+  };
+
+  // V8.6 - Open service modal for add/edit
+  const openServiceModal = (service?: Service) => {
+    setEditingService(service || null);
+    setServiceModalVisible(true);
+  };
+
+  // V8.6 - Handle service save from modal
+  const handleServiceSave = (name: string, price: number) => {
+    if (editingService) {
+      editService(name, price);
+    } else {
+      addService(name, price);
+    }
+    setServiceModalVisible(false);
+    setEditingService(null);
+  };
+
+  // V8.6 - Handle service selection with price autofill
+  const handleServiceChange = (serviceName: string, servicePrice?: number) => {
+    setSelectedService(serviceName);
+    if (servicePrice !== undefined) {
+      setAmount(servicePrice.toString());
+    } else {
+      const service = services.find((item) => item.name === serviceName);
+      if (service) setAmount(service.price.toString());
+    }
+  };
+
   // V8.5 - Initialize default workers if none exist
   const initializeDefaultWorkers = async () => {
     const defaultWorkers: Worker[] = [
@@ -82,13 +334,11 @@ export default function HomeScreen() {
 
   // V8.5 - Add new worker
   const addWorker = async () => {
-    // Validate name
     if (!newWorkerName.trim()) {
       Alert.alert('Error', 'Worker name cannot be empty');
       return;
     }
 
-    // Check for duplicates
     const nameExists = workers.some(
       w => w.name.toLowerCase() === newWorkerName.trim().toLowerCase()
     );
@@ -108,14 +358,12 @@ export default function HomeScreen() {
     setWorkers(updatedWorkers);
     await AsyncStorage.setItem('workers', JSON.stringify(updatedWorkers));
 
-    // Clear input
     setNewWorkerName('');
     Alert.alert('Success', `${newWorker.name} added successfully`);
   };
 
-  // V8.5 - Deactivate worker (soft delete)
+  // V8.5 - Deactivate worker
   const deactivateWorker = async (workerId: string, workerName: string) => {
-    // FIX #3: Prevent deactivating last active worker
     const activeCount = workers.filter(w => w.active).length;
     
     if (activeCount === 1 && workers.find(w => w.id === workerId)?.active) {
@@ -126,7 +374,6 @@ export default function HomeScreen() {
       return;
     }
 
-    // Check if worker has transactions today
     const hasTransactions = transactions.some(t => t.worker === workerName);
     if (hasTransactions) {
       Alert.alert(
@@ -138,7 +385,7 @@ export default function HomeScreen() {
 
     Alert.alert(
       'Deactivate Worker',
-      `Are you sure you want to deactivate ${workerName}?\n\nDeactivated workers will not appear in worker selection dropdowns but will remain in historical reports.`,
+      `Are you sure you want to deactivate ${workerName}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -151,7 +398,6 @@ export default function HomeScreen() {
             setWorkers(updatedWorkers);
             await AsyncStorage.setItem('workers', JSON.stringify(updatedWorkers));
 
-            // If deactivated worker was selected, reset selection
             if (selectedWorker === workerName) {
               const activeWorkersList = updatedWorkers.filter(w => w.active);
               setSelectedWorker(activeWorkersList.length > 0 ? activeWorkersList[0].name : '');
@@ -188,29 +434,59 @@ export default function HomeScreen() {
 
   const loadAllData = async () => {
     try {
-      // V8.5 - Load workers with migration fix
+      // V8.6 - Load services with proper migration
+      let savedServices = await AsyncStorage.getItem('services');
+      let loadedServices: Service[] = [];
+
+      if (!savedServices) {
+        // First launch - create default services
+        loadedServices = await initializeDefaultServices();
+      } else {
+        const parsedServices = JSON.parse(savedServices);
+        
+        // Check if old format (array of strings)
+        if (parsedServices.length > 0 && typeof parsedServices[0] === 'string') {
+          // Old format detected - reinitialize with defaults
+          console.log('Old service format detected, migrating to new format...');
+          loadedServices = await initializeDefaultServices();
+        } else {
+          // New format - just ensure all fields exist
+          loadedServices = parsedServices.map((s: any) => ({
+            id: s.id || Date.now().toString() + Math.random(),
+            name: s.name,
+            price: s.price || 100, // Default price if missing
+          }));
+        }
+        
+        await AsyncStorage.setItem('services', JSON.stringify(loadedServices));
+      }
+
+      setServices(loadedServices);
+      
+      // Set default selected service
+      if (loadedServices.length > 0 && !selectedService) {
+        setSelectedService(loadedServices[0].name);
+        setAmount(loadedServices[0].price.toString());
+      }
+
+      // V8.5 - Load workers
       let savedWorkers = await AsyncStorage.getItem('workers');
       let loadedWorkers: Worker[] = [];
 
       if (!savedWorkers) {
-        // First launch - create default workers
         loadedWorkers = await initializeDefaultWorkers();
       } else {
-        // FIX #1: Migration for existing V8 users
         const parsedWorkers = JSON.parse(savedWorkers);
         loadedWorkers = parsedWorkers.map((w: any) => ({
-          id: w.id || Date.now().toString() + Math.random(), // Handle old format without id
-          name: w.name || w, // Handle old format where worker was just a string
-          active: w.active ?? true, // Default to active if property doesn't exist
+          id: w.id || Date.now().toString() + Math.random(),
+          name: w.name || w,
+          active: w.active ?? true,
         }));
-        
-        // Save migrated data back to storage
         await AsyncStorage.setItem('workers', JSON.stringify(loadedWorkers));
       }
 
       setWorkers(loadedWorkers);
       
-      // Set default selected worker (first active worker)
       const activeWorkersList = loadedWorkers.filter(w => w.active);
       if (activeWorkersList.length > 0 && !selectedWorker) {
         setSelectedWorker(activeWorkersList[0].name);
@@ -247,13 +523,16 @@ export default function HomeScreen() {
     setIsLoaded(true);
   };
 
-  const handleServiceChange = (serviceName: string) => {
-    setSelectedService(serviceName);
-    const service = services.find((item) => item.name === serviceName);
-    if (service) setAmount(service.price.toString());
-  };
-
   const saveTransaction = async () => {
+    // CRITICAL FIX: Validate amount before saving
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      Alert.alert(
+        'Invalid Amount',
+        'Please enter a valid amount greater than 0'
+      );
+      return;
+    }
+
     const newTransaction = {
       id: Date.now(),
       worker: selectedWorker,
@@ -280,8 +559,10 @@ export default function HomeScreen() {
 
     const activeWorkersList = workers.filter(w => w.active);
     setSelectedWorker(activeWorkersList.length > 0 ? activeWorkersList[0].name : '');
-    setSelectedService('Hair Cut');
-    setAmount('150');
+    if (services.length > 0) {
+      setSelectedService(services[0].name);
+      setAmount(services[0].price.toString());
+    }
     setPaymentMode('Cash');
     navigateTo('home');
   };
@@ -382,11 +663,13 @@ export default function HomeScreen() {
         {
           text: 'Close Day',
           onPress: async () => {
-            // Use all workers (including inactive) for historical accuracy
-            const workerReport = workers.map((worker) => {
-              const workDone = getWorkerTotal(worker.name);
-              return { worker: worker.name, workDone, share: worker.name === 'Pankaj' ? workDone : workDone / 2 };
-            });
+            // FIX: Only include active workers in reports
+            const workerReport = workers
+              .filter(w => w.active)
+              .map((worker) => {
+                const workDone = getWorkerTotal(worker.name);
+                return { worker: worker.name, workDone, share: worker.name === 'Pankaj' ? workDone : workDone / 2 };
+              });
 
             const now = new Date();
             const serviceReport = services.map((service) => ({
@@ -431,7 +714,6 @@ export default function HomeScreen() {
     setDayClosed(false);
   };
 
-  // V8.5 - Get active workers only (for dropdowns)
   const activeWorkers = workers.filter(w => w.active).map(w => w.name);
 
   const getWorkerTotal = (workerName: string) => {
@@ -440,7 +722,7 @@ export default function HomeScreen() {
 
   const navigateTo = (s: string) => {
     setScreen(s);
-    if (['home', 'workers', 'reports', 'analytics', 'expenses'].includes(s)) {
+    if (['home', 'workers', 'reports', 'analytics', 'expenses', 'services'].includes(s)) {
       setActiveTab(s);
     }
   };
@@ -459,6 +741,7 @@ export default function HomeScreen() {
       {[
         { key: 'home', label: '🏠 Home' },
         { key: 'workers', label: '👨 Workers' },
+        { key: 'services', label: '✂️ Services' },
         { key: 'reports', label: '📁 Reports' },
         { key: 'analytics', label: '📊 Stats' },
         { key: 'expenses', label: '💰 Expenses' },
@@ -474,6 +757,74 @@ export default function HomeScreen() {
       ))}
     </View>
   );
+
+  // ── Services Screen ──────────────────────────────
+  if (screen === 'services') {
+    return (
+      <View style={styles.screenWrapper}>
+        <ScrollView style={styles.container}>
+          <Text style={styles.title}>✂️ Service Management</Text>
+
+          {/* Add Service Button */}
+          <TouchableOpacity
+            style={styles.addServiceButton}
+            onPress={() => openServiceModal()}>
+            <Text style={styles.addServiceButtonText}>➕ Add New Service</Text>
+          </TouchableOpacity>
+
+          {/* Services List */}
+          <Text style={styles.sectionHeading}>Services List</Text>
+          
+          {services.length === 0 ? (
+            <View style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateText}>No services found</Text>
+              <Text style={styles.emptyStateSubText}>Add a service to continue</Text>
+            </View>
+          ) : (
+            services.map((service) => (
+              <View key={service.id} style={styles.serviceCard}>
+                <View style={styles.serviceInfo}>
+                  <Text style={styles.serviceName}>{service.name}</Text>
+                  <Text style={styles.servicePrice}>₹{service.price}</Text>
+                </View>
+                <View style={styles.serviceActions}>
+                  <TouchableOpacity
+                    style={styles.editServiceButton}
+                    onPress={() => openServiceModal(service)}>
+                    <Text style={styles.actionButtonText}>✏️ Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteServiceButton}
+                    onPress={() => deleteService(service.id, service.name)}>
+                    <Text style={styles.actionButtonText}>🗑 Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+
+          {/* Info Note */}
+          {services.length > 0 && (
+            <View style={styles.infoNote}>
+              <Text style={styles.infoNoteText}>
+                ℹ️ Editing or deleting services won't affect historical reports.
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+        <BottomNav />
+        <ServiceModalComponent
+          visible={serviceModalVisible}
+          onClose={() => {
+            setServiceModalVisible(false);
+            setEditingService(null);
+          }}
+          onSave={handleServiceSave}
+          editingService={editingService}
+        />
+      </View>
+    );
+  }
 
   // ── Add Transaction Screen ───────────────────────
   if (screen === 'transaction') {
@@ -497,6 +848,26 @@ export default function HomeScreen() {
       );
     }
 
+    if (services.length === 0) {
+      return (
+        <View style={styles.screenWrapper}>
+          <ScrollView style={styles.container}>
+            <Text style={styles.title}>➕ Add Transaction</Text>
+            <View style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateText}>No services available</Text>
+              <Text style={styles.emptyStateSubText}>Please add services in Services section first</Text>
+            </View>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigateTo('services')}>
+              <Text style={styles.buttonText}>Go to Services</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigateTo('home')}>
+              <Text style={styles.buttonText}>← Back</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.screenWrapper}>
         <ScrollView style={styles.container}>
@@ -510,9 +881,16 @@ export default function HomeScreen() {
           </Picker>
 
           <Text style={styles.label}>Service</Text>
-          <Picker selectedValue={selectedService} onValueChange={handleServiceChange}>
+          <Picker 
+            selectedValue={selectedService} 
+            onValueChange={(value) => {
+              const service = services.find(s => s.name === value);
+              if (service) {
+                handleServiceChange(value, service.price);
+              }
+            }}>
             {services.map((service) => (
-              <Picker.Item key={service.name} label={service.name} value={service.name} />
+              <Picker.Item key={service.id} label={`${service.name} (₹${service.price})`} value={service.name} />
             ))}
           </Picker>
 
@@ -522,6 +900,7 @@ export default function HomeScreen() {
             value={amount}
             onChangeText={setAmount}
             keyboardType="numeric"
+            placeholder="Enter amount"
           />
 
           <Text style={styles.label}>Payment Mode</Text>
@@ -555,7 +934,6 @@ export default function HomeScreen() {
         <ScrollView style={styles.container}>
           <Text style={styles.title}>💰 Expenses</Text>
 
-          {/* Profit Cards */}
           <View style={[styles.card, { backgroundColor: todayProfit >= 0 ? '#e8f5e9' : '#fdecea' }]}>
             <Text style={styles.cardTitle}>Today's Profit</Text>
             <Text style={[styles.dashboardAmount, { color: todayProfit >= 0 ? '#2e7d32' : '#c62828' }]}>
@@ -574,14 +952,12 @@ export default function HomeScreen() {
             <Text style={styles.dashboardInfo}>Expenses : ₹{monthlyExpenseTotal}</Text>
           </View>
 
-          {/* Expense Summary */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Expense Summary</Text>
             <Text style={styles.dashboardInfo}>Today : ₹{todayExpenseTotal}</Text>
             <Text style={styles.dashboardInfo}>This Month : ₹{monthlyExpenseTotal}</Text>
           </View>
 
-          {/* Add Expense Form */}
           <Text style={styles.sectionHeading}>Add Expense</Text>
 
           <Text style={styles.label}>Amount (₹)</Text>
@@ -618,7 +994,6 @@ export default function HomeScreen() {
             <Text style={styles.buttonText}>➕ Save Expense</Text>
           </TouchableOpacity>
 
-          {/* Expense History */}
           <Text style={styles.sectionHeading}>Expense History</Text>
 
           {expenses.length === 0 ? (
@@ -650,7 +1025,7 @@ export default function HomeScreen() {
     );
   }
 
-  // ── Workers Screen (Pure Management) ──
+  // ── Workers Screen ───────────────────────────────
   if (screen === 'workers') {
     const settleWorker = (name: string) => {
       const alreadySettled = settlements.find((s) => s.worker === name);
@@ -693,11 +1068,9 @@ export default function HomeScreen() {
       );
     };
 
-    // FIX #6: Calculate active/inactive counts
     const activeCount = workers.filter(w => w.active).length;
     const inactiveCount = workers.filter(w => !w.active).length;
     
-    // FIX #5: Sort workers - active first, then inactive
     const sortedWorkers = [...workers].sort((a, b) => {
       if (a.active === b.active) return a.name.localeCompare(b.name);
       return a.active ? -1 : 1;
@@ -708,7 +1081,6 @@ export default function HomeScreen() {
         <ScrollView style={styles.container}>
           <Text style={styles.title}>👨 Worker Management</Text>
 
-          {/* FIX #6: Worker Count Summary */}
           <View style={styles.statsCard}>
             <View style={styles.statBox}>
               <Text style={styles.statNumber}>{activeCount}</Text>
@@ -721,7 +1093,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Add Worker Form */}
           <View style={styles.addWorkerCard}>
             <Text style={styles.cardTitle}>➕ Add New Worker</Text>
             <TextInput
@@ -736,7 +1107,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Workers List */}
           <Text style={styles.sectionHeading}>Workers List</Text>
           
           {workers.length === 0 ? (
@@ -749,7 +1119,6 @@ export default function HomeScreen() {
               const isSettled = settlements.some((s) => s.worker === worker.name);
               const isActive = worker.active;
               
-              // FIX #5: Add separator between active and inactive sections
               const showSeparator = !isActive && index > 0 && sortedWorkers[index - 1].active;
               
               return (
@@ -770,7 +1139,6 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                     <View style={styles.workerActionsRow}>
-                      {/* FIX #4: Only show settlement button for active workers */}
                       {isActive && worker.name !== 'Pankaj' && (
                         <TouchableOpacity
                           style={[styles.settleButton, isSettled && { backgroundColor: '#999' }]}
@@ -801,7 +1169,6 @@ export default function HomeScreen() {
             })
           )}
 
-          {/* Today's Settlements */}
           <Text style={styles.sectionHeading}>Today's Settlements</Text>
           {settlements.length === 0 ? (
             <Text style={styles.emptyText}>No settlements yet</Text>
@@ -986,7 +1353,6 @@ export default function HomeScreen() {
               📋 {selectedReport.date}{selectedReport.closedAt ? `\n${selectedReport.closedAt}` : ''}
             </Text>
 
-            {/* Revenue */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Revenue</Text>
               <Text style={styles.dashboardAmount}>₹{selectedReport.totalCollection}</Text>
@@ -994,7 +1360,6 @@ export default function HomeScreen() {
               <Text style={styles.dashboardInfo}>UPI : ₹{selectedReport.upiTotal}</Text>
             </View>
 
-            {/* Expenses & Profit */}
             {selectedReport.totalExpenses !== undefined && (
               <View style={[styles.card, { backgroundColor: (selectedReport.profit ?? 0) >= 0 ? '#e8f5e9' : '#fdecea' }]}>
                 <Text style={styles.cardTitle}>Expenses & Profit</Text>
@@ -1026,6 +1391,19 @@ export default function HomeScreen() {
                 </View>
               </View>
             ))}
+
+            {/* Service Breakdown */}
+            {selectedReport.serviceReport && selectedReport.serviceReport.length > 0 && (
+              <>
+                <Text style={styles.sectionHeading}>✂️ Service Breakdown</Text>
+                {selectedReport.serviceReport.map((item: any, idx: number) => (
+                  <View key={idx} style={styles.serviceBreakdownCard}>
+                    <Text style={styles.serviceBreakdownName}>{item.service}</Text>
+                    <Text style={styles.serviceBreakdownCount}>{item.count} times</Text>
+                  </View>
+                ))}
+              </>
+            )}
           </ScrollView>
           <BottomNav />
         </View>
@@ -1137,11 +1515,13 @@ export default function HomeScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.addTransactionButton, (dayClosed || activeWorkers.length === 0) && { backgroundColor: '#999' }]}
-          disabled={dayClosed || activeWorkers.length === 0}
+          style={[styles.addTransactionButton, (dayClosed || activeWorkers.length === 0 || services.length === 0) && { backgroundColor: '#999' }]}
+          disabled={dayClosed || activeWorkers.length === 0 || services.length === 0}
           onPress={() => setScreen('transaction')}>
           <Text style={styles.addTransactionText}>
-            {activeWorkers.length === 0 ? '⚠️ No Workers Available' : '➕ Add Transaction'}
+            {services.length === 0 ? '⚠️ No Services Available' : 
+             activeWorkers.length === 0 ? '⚠️ No Workers Available' : 
+             '➕ Add Transaction'}
           </Text>
         </TouchableOpacity>
 
@@ -1355,6 +1735,125 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
+  // ── Service Management Styles ───────────────────
+  addServiceButton: {
+    backgroundColor: '#6f42c1',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  addServiceButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  serviceCard: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  serviceInfo: {
+    flex: 1,
+  },
+  serviceName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  servicePrice: {
+    fontSize: 14,
+    color: '#28a745',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  serviceActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  editServiceButton: {
+    backgroundColor: '#17a2b8',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  deleteServiceButton: {
+    backgroundColor: '#d9534f',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  infoNote: {
+    backgroundColor: '#e7f3ff',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  infoNoteText: {
+    fontSize: 13,
+    color: '#0066cc',
+    textAlign: 'center',
+  },
+  serviceBreakdownCard: {
+    backgroundColor: '#fff',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  serviceBreakdownName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+  },
+  serviceBreakdownCount: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#6f42c1',
+  },
+
+  // ── Modal Styles ────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 20,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#6c757d',
+  },
+
   // ── Worker Cards ─────────────────────────────────
   workerCard: {
     backgroundColor: '#fff',
@@ -1384,7 +1883,7 @@ const styles = StyleSheet.create({
     color: '#28a745',
   },
   
-  // V8.5 - Worker Management Styles
+  // ── Worker Management Styles ───────────────────
   statsCard: {
     backgroundColor: '#fff',
     padding: 20,
