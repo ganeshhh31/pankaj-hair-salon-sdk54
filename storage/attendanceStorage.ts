@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Attendance } from "../types/Attendance";
 import { STORAGE_KEYS } from "./keys";
 
-// ─── Core Helpers ────────────────────────────────────────────────────────────
+// ─── Core Helpers ─────────────────────────────────────────────────────────────
 
 const loadAttendance = async (): Promise<Attendance[]> => {
   const data = await AsyncStorage.getItem(STORAGE_KEYS.ATTENDANCE);
@@ -14,7 +14,7 @@ const persistAttendance = async (records: Attendance[]): Promise<void> => {
   await AsyncStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(records));
 };
 
-// ─── CRUD ────────────────────────────────────────────────────────────────────
+// ─── CRUD ─────────────────────────────────────────────────────────────────────
 
 export const getAttendance = async (): Promise<Attendance[]> => {
   try {
@@ -25,7 +25,6 @@ export const getAttendance = async (): Promise<Attendance[]> => {
   }
 };
 
-// FIX: Added — was missing in V8 despite attendanceId being the primary key
 export const getAttendanceById = async (
   attendanceId: string,
 ): Promise<Attendance | undefined> => {
@@ -41,7 +40,6 @@ export const getAttendanceById = async (
   }
 };
 
-// Utility: get all attendance records for a specific worker
 export const getWorkerAttendance = async (
   workerId: string,
 ): Promise<Attendance[]> => {
@@ -54,6 +52,23 @@ export const getWorkerAttendance = async (
       error,
     );
     return [];
+  }
+};
+
+// Returns today's attendance record for a worker, if it exists.
+export const getTodayAttendance = async (
+  workerId: string,
+  date: string,
+): Promise<Attendance | undefined> => {
+  try {
+    const records = await loadAttendance();
+    return records.find((a) => a.workerId === workerId && a.date === date);
+  } catch (error) {
+    console.error(
+      `[attendanceStorage] getTodayAttendance(${workerId}, ${date}) failed:`,
+      error,
+    );
+    return undefined;
   }
 };
 
@@ -89,7 +104,7 @@ export const updateAttendance = async (
     );
     if (index === -1) {
       console.warn(
-        `[attendanceStorage] updateAttendance: attendanceId "${updatedAttendance.attendanceId}" not found. Use saveAttendance instead.`,
+        `[attendanceStorage] updateAttendance: attendanceId "${updatedAttendance.attendanceId}" not found.`,
       );
       return;
     }
@@ -101,9 +116,7 @@ export const updateAttendance = async (
   }
 };
 
-export const deleteAttendance = async (
-  attendanceId: string,
-): Promise<void> => {
+export const deleteAttendance = async (attendanceId: string): Promise<void> => {
   try {
     const records = await loadAttendance();
     const filtered = records.filter((a) => a.attendanceId !== attendanceId);
