@@ -1,6 +1,6 @@
 import { Button, View } from "react-native";
 
-import { getWorkers, saveWorker } from "../storage/workerStorage";
+import { getWorkers, saveWorker } from "@/storage/workerStorage";
 
 export default function TestScreen() {
   const addWorker = async () => {
@@ -8,8 +8,9 @@ export default function TestScreen() {
       workerId: Date.now().toString(),
       name: "Ganesh",
       phone: "9999999999",
-      status: "ACTIVE",
-      joinDate: new Date().toISOString(),
+      pin: "",
+      status: "INACTIVE",
+      joinDate: new Date().toISOString().split("T")[0],
       role: "worker",
     });
 
@@ -18,7 +19,6 @@ export default function TestScreen() {
 
   const loadWorkers = async () => {
     const workers = await getWorkers();
-
     console.log("Workers:", workers);
   };
 

@@ -1,0 +1,26 @@
+export type Permission =
+  | "ATTENDANCE_READ"
+  | "ATTENDANCE_WRITE"
+  | "WORKER_READ"
+  | "WORKER_WRITE"
+  | "WORKER_DELETE"
+  | "SERVICE_READ"
+  | "SERVICE_WRITE"
+  | "SERVICE_DELETE"
+  | "TRANSACTION_READ"
+  | "TRANSACTION_WRITE"
+  | "EXPENSE_READ"
+  | "EXPENSE_WRITE"
+  | "EXPENSE_DELETE"
+  | "REPORT_READ"
+  | "REPORT_WRITE"
+  | "SETTLEMENT_READ"
+  | "SETTLEMENT_WRITE"
+  | "SETTINGS_READ"
+  | "SETTINGS_WRITE"
+  | "AUDIT_READ"
+  | "DASHBOARD_OWNER"
+  | "DASHBOARD_WORKER"
+  | "DAY_CLOSE";
+
+export type PermissionMap = Record<Permission, boolean>;
