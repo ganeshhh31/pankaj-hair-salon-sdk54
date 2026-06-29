@@ -12,12 +12,9 @@ import {
   View,
 } from "react-native";
 
-// Worker type definition
-interface Worker {
-  id: string;
-  name: string;
-  active: boolean;
-}
+import { saveWorkerPinHash } from "@/storage/authStorage";
+import { Worker } from "@/types/Worker";
+import { hashPin } from "@/utils/pinHash";
 
 // V8.6 - Service type definition
 interface Service {
@@ -178,6 +175,59 @@ export default function HomeScreen() {
     loadAllData();
   }, []);
 
+  const isWorkerActive = (worker: Worker | undefined) =>
+    worker?.status === "ACTIVE";
+
+  const normalizeWorkerRecord = (
+    worker: Partial<Worker> & { id?: string; active?: boolean },
+    fallbackId: string,
+  ): Worker => {
+    const normalizedStatus: Worker["status"] =
+      worker.status === "ACTIVE" ||
+      worker.status === "CHECKED_OUT" ||
+      worker.status === "SETTLED" ||
+      worker.status === "INACTIVE"
+        ? worker.status
+        : worker.active === false
+          ? "INACTIVE"
+          : "ACTIVE";
+
+    return {
+      workerId: worker.workerId ?? worker.id ?? fallbackId,
+      name:
+        typeof worker.name === "string" && worker.name.trim()
+          ? worker.name.trim()
+          : "Unnamed Worker",
+      phone: typeof worker.phone === "string" ? worker.phone.trim() : "",
+      pin: typeof worker.pin === "string" ? worker.pin : "",
+      role: "worker",
+      status: normalizedStatus,
+      joinDate:
+        typeof worker.joinDate === "string" && worker.joinDate
+          ? worker.joinDate
+          : new Date().toISOString().split("T")[0],
+    };
+  };
+
+  const createWorkerRecord = async (workerName: string): Promise<Worker> => {
+    const trimmedName = workerName.trim();
+    const workerId = Date.now().toString();
+    const phone = `9${String(Date.now()).slice(-9)}`;
+    const initialPin = "1234";
+
+    await saveWorkerPinHash(workerId, await hashPin(initialPin, workerId));
+
+    return {
+      workerId,
+      name: trimmedName,
+      phone,
+      pin: initialPin,
+      role: "worker",
+      status: "ACTIVE",
+      joinDate: new Date().toISOString().split("T")[0],
+    };
+  };
+
   // V8.6 - Initialize default services if none exist
   const initializeDefaultServices = async () => {
     const defaultServices: Service[] = [
@@ -333,11 +383,9 @@ export default function HomeScreen() {
 
   // V8.5 - Initialize default workers if none exist
   const initializeDefaultWorkers = async () => {
-    const defaultWorkers: Worker[] = [
-      { id: "1", name: "Pankaj", active: true },
-      { id: "2", name: "Rohit", active: true },
-      { id: "3", name: "Amit", active: true },
-    ];
+    const defaultWorkers = await Promise.all(
+      ["Pankaj", "Rohit", "Amit"].map((name) => createWorkerRecord(name)),
+    );
 
     await AsyncStorage.setItem("workers", JSON.stringify(defaultWorkers));
     return defaultWorkers;
@@ -359,11 +407,7 @@ export default function HomeScreen() {
       return;
     }
 
-    const newWorker: Worker = {
-      id: Date.now().toString(),
-      name: newWorkerName.trim(),
-      active: true,
-    };
+    const newWorker = await createWorkerRecord(newWorkerName.trim());
 
     const updatedWorkers = [...workers, newWorker];
     setWorkers(updatedWorkers);
@@ -375,9 +419,12 @@ export default function HomeScreen() {
 
   // V8.5 - Deactivate worker
   const deactivateWorker = async (workerId: string, workerName: string) => {
-    const activeCount = workers.filter((w) => w.active).length;
+    const activeCount = workers.filter((w) => isWorkerActive(w)).length;
 
-    if (activeCount === 1 && workers.find((w) => w.id === workerId)?.active) {
+    if (
+      activeCount === 1 &&
+      isWorkerActive(workers.find((w) => w.workerId === workerId))
+    ) {
       Alert.alert(
         "Cannot Deactivate",
         "At least one worker must remain active. Please add another worker before deactivating this one.",
@@ -403,8 +450,8 @@ export default function HomeScreen() {
           text: "Deactivate",
           style: "destructive",
           onPress: async () => {
-            const updatedWorkers = workers.map((w) =>
-              w.id === workerId ? { ...w, active: false } : w,
+            const updatedWorkers: Worker[] = workers.map((w) =>
+              w.workerId === workerId ? { ...w, status: "INACTIVE" } : w,
             );
             setWorkers(updatedWorkers);
             await AsyncStorage.setItem(
@@ -413,7 +460,9 @@ export default function HomeScreen() {
             );
 
             if (selectedWorker === workerName) {
-              const activeWorkersList = updatedWorkers.filter((w) => w.active);
+              const activeWorkersList = updatedWorkers.filter((w) =>
+                isWorkerActive(w),
+              );
               setSelectedWorker(
                 activeWorkersList.length > 0 ? activeWorkersList[0].name : "",
               );
@@ -433,8 +482,8 @@ export default function HomeScreen() {
       {
         text: "Reactivate",
         onPress: async () => {
-          const updatedWorkers = workers.map((w) =>
-            w.id === workerId ? { ...w, active: true } : w,
+          const updatedWorkers: Worker[] = workers.map((w) =>
+            w.workerId === workerId ? { ...w, status: "ACTIVE" } : w,
           );
           setWorkers(updatedWorkers);
           await AsyncStorage.setItem("workers", JSON.stringify(updatedWorkers));
@@ -494,17 +543,15 @@ export default function HomeScreen() {
         loadedWorkers = await initializeDefaultWorkers();
       } else {
         const parsedWorkers = JSON.parse(savedWorkers);
-        loadedWorkers = parsedWorkers.map((w: any) => ({
-          id: w.id || Date.now().toString() + Math.random(),
-          name: w.name || w,
-          active: w.active ?? true,
-        }));
+        loadedWorkers = parsedWorkers.map((w: any, index: number) =>
+          normalizeWorkerRecord(w, `${Date.now()}-${index}`),
+        );
         await AsyncStorage.setItem("workers", JSON.stringify(loadedWorkers));
       }
 
       setWorkers(loadedWorkers);
 
-      const activeWorkersList = loadedWorkers.filter((w) => w.active);
+      const activeWorkersList = loadedWorkers.filter((w) => isWorkerActive(w));
       if (activeWorkersList.length > 0 && !selectedWorker) {
         setSelectedWorker(activeWorkersList[0].name);
       }
@@ -583,7 +630,7 @@ export default function HomeScreen() {
       console.log(error);
     }
 
-    const activeWorkersList = workers.filter((w) => w.active);
+    const activeWorkersList = workers.filter((w) => isWorkerActive(w));
     setSelectedWorker(
       activeWorkersList.length > 0 ? activeWorkersList[0].name : "",
     );
@@ -713,7 +760,7 @@ export default function HomeScreen() {
           onPress: async () => {
             // FIX: Only include active workers in reports
             const workerReport = workers
-              .filter((w) => w.active)
+              .filter((w) => isWorkerActive(w))
               .map((worker) => {
                 const workDone = getWorkerTotal(worker.name);
                 return {
@@ -774,7 +821,7 @@ export default function HomeScreen() {
     setDayClosed(false);
   };
 
-  const activeWorkers = workers.filter((w) => w.active).map((w) => w.name);
+  const activeWorkers = workers.filter((w) => isWorkerActive(w)).map((w) => w.name);
 
   const getWorkerTotal = (workerName: string) => {
     return transactions
@@ -1231,12 +1278,14 @@ export default function HomeScreen() {
       );
     };
 
-    const activeCount = workers.filter((w) => w.active).length;
-    const inactiveCount = workers.filter((w) => !w.active).length;
+    const activeCount = workers.filter((w) => isWorkerActive(w)).length;
+    const inactiveCount = workers.filter((w) => !isWorkerActive(w)).length;
 
     const sortedWorkers = [...workers].sort((a, b) => {
-      if (a.active === b.active) return a.name.localeCompare(b.name);
-      return a.active ? -1 : 1;
+      const aActive = isWorkerActive(a);
+      const bActive = isWorkerActive(b);
+      if (aActive === bActive) return a.name.localeCompare(b.name);
+      return aActive ? -1 : 1;
     });
 
     return (
@@ -1284,13 +1333,15 @@ export default function HomeScreen() {
               const isSettled = settlements.some(
                 (s) => s.worker === worker.name,
               );
-              const isActive = worker.active;
+              const isActive = isWorkerActive(worker);
 
               const showSeparator =
-                !isActive && index > 0 && sortedWorkers[index - 1].active;
+                !isActive &&
+                index > 0 &&
+                isWorkerActive(sortedWorkers[index - 1]);
 
               return (
-                <React.Fragment key={worker.id}>
+                <React.Fragment key={worker.workerId}>
                   {showSeparator && (
                     <View style={styles.separator}>
                       <Text style={styles.separatorText}>Inactive Workers</Text>
@@ -1329,7 +1380,7 @@ export default function HomeScreen() {
                         <TouchableOpacity
                           style={styles.deactivateButton}
                           onPress={() =>
-                            deactivateWorker(worker.id, worker.name)
+                            deactivateWorker(worker.workerId, worker.name)
                           }
                         >
                           <Text style={styles.actionButtonText}>
@@ -1340,7 +1391,7 @@ export default function HomeScreen() {
                         <TouchableOpacity
                           style={styles.reactivateButton}
                           onPress={() =>
-                            reactivateWorker(worker.id, worker.name)
+                            reactivateWorker(worker.workerId, worker.name)
                           }
                         >
                           <Text style={styles.actionButtonText}>
@@ -1839,11 +1890,11 @@ export default function HomeScreen() {
 
         <Text style={styles.sectionHeading}>Worker Earnings</Text>
         {workers
-          .filter((w) => w.active)
+          .filter((w) => isWorkerActive(w))
           .map((worker) => {
             const isSettled = settlements.some((s) => s.worker === worker.name);
             return (
-              <View key={worker.id} style={styles.workerCard}>
+              <View key={worker.workerId} style={styles.workerCard}>
                 <Text style={styles.workerName}>
                   {worker.name}
                   {isSettled ? "  ✅" : ""}

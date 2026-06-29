@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
   SETTINGS: "settings",
   SERVICES: "services",         // Added: was missing in V8
   SCHEMA_VERSION: "schema_version", // Added: for future migration support
+  AUDIT_LOGS: "audit_logs",
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

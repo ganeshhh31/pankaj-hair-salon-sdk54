@@ -5,9 +5,52 @@ import { STORAGE_KEYS } from "./keys";
 
 // ─── Core Helpers ────────────────────────────────────────────────────────────
 
+const normalizeWorker = (
+  worker: Partial<Worker> & { id?: string; active?: boolean },
+  fallbackId: string,
+): Worker => {
+  const normalizedStatus: Worker["status"] =
+    worker.status === "ACTIVE" ||
+    worker.status === "CHECKED_OUT" ||
+    worker.status === "SETTLED" ||
+    worker.status === "INACTIVE"
+      ? worker.status
+      : worker.active === false
+        ? "INACTIVE"
+        : "ACTIVE";
+
+  return {
+    workerId: worker.workerId ?? worker.id ?? fallbackId,
+    name:
+      typeof worker.name === "string" && worker.name.trim()
+        ? worker.name.trim()
+        : "Unnamed Worker",
+    phone: typeof worker.phone === "string" ? worker.phone.trim() : "",
+    pin: typeof worker.pin === "string" ? worker.pin : "",
+    role: "worker",
+    status: normalizedStatus,
+    joinDate:
+      typeof worker.joinDate === "string" && worker.joinDate
+        ? worker.joinDate
+        : new Date().toISOString().split("T")[0],
+  };
+};
+
 const loadWorkers = async (): Promise<Worker[]> => {
   const data = await AsyncStorage.getItem(STORAGE_KEYS.WORKERS);
-  return data ? (JSON.parse(data) as Worker[]) : [];
+  if (!data) return [];
+
+  const parsedData = JSON.parse(data);
+  const workers = Array.isArray(parsedData) ? parsedData : [];
+  const normalizedWorkers = workers.map((worker, index) =>
+    normalizeWorker(worker, `${Date.now()}-${index}`),
+  );
+
+  if (JSON.stringify(normalizedWorkers) !== data) {
+    await AsyncStorage.setItem(STORAGE_KEYS.WORKERS, JSON.stringify(normalizedWorkers));
+  }
+
+  return normalizedWorkers;
 };
 
 const persistWorkers = async (workers: Worker[]): Promise<void> => {
@@ -40,17 +83,18 @@ export const getWorkerById = async (
 export const saveWorker = async (worker: Worker): Promise<void> => {
   try {
     const workers = await loadWorkers();
+    const normalizedWorker = normalizeWorker(worker, worker.workerId);
 
     // FIX: Prevent duplicates — skip save if workerId already exists
-    const exists = workers.some((w) => w.workerId === worker.workerId);
+    const exists = workers.some((w) => w.workerId === normalizedWorker.workerId);
     if (exists) {
       console.warn(
-        `[workerStorage] saveWorker: workerId "${worker.workerId}" already exists. Use updateWorker instead.`,
+        `[workerStorage] saveWorker: workerId "${normalizedWorker.workerId}" already exists. Use updateWorker instead.`,
       );
       return;
     }
 
-    workers.push(worker);
+    workers.push(normalizedWorker);
     await persistWorkers(workers);
   } catch (error) {
     console.error("[workerStorage] saveWorker failed:", error);
@@ -60,18 +104,19 @@ export const saveWorker = async (worker: Worker): Promise<void> => {
 export const updateWorker = async (updatedWorker: Worker): Promise<void> => {
   try {
     const workers = await loadWorkers();
+    const normalizedWorker = normalizeWorker(updatedWorker, updatedWorker.workerId);
 
     const index = workers.findIndex(
-      (w) => w.workerId === updatedWorker.workerId,
+      (w) => w.workerId === normalizedWorker.workerId,
     );
     if (index === -1) {
       console.warn(
-        `[workerStorage] updateWorker: workerId "${updatedWorker.workerId}" not found. Use saveWorker instead.`,
+        `[workerStorage] updateWorker: workerId "${normalizedWorker.workerId}" not found. Use saveWorker instead.`,
       );
       return;
     }
 
-    workers[index] = updatedWorker;
+    workers[index] = normalizedWorker;
     await persistWorkers(workers);
   } catch (error) {
     console.error("[workerStorage] updateWorker failed:", error);
