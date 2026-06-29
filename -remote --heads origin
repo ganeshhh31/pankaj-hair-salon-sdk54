@@ -1,0 +1,20 @@
+* [33m3878ca0[m Session b9d370cf-635f-4bb0-a9e7-fa76982c32b4 - checkpoint turn 0
+* [33m2337b0c[m Session 3c5d81e4-b64f-4cbb-9fad-7305798dba30 - checkpoint turn 0
+* [33mf556c7f[m Session d6d97c3c-d2d2-4f44-bf94-d6c28df85930 - checkpoint turn 0
+* [33m17733f3[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mbackup/v9-auth-debug[m[33m, [m[1;31morigin/backup/v9-auth-debug[m[33m, [m[1;32magents/auth-system-debug-investigation-c2998394[m[33m)[m WIP backup
+* [33mdddc66f[m[33m ([m[1;31morigin/v9-beta[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mv9-beta[m[33m, [m[1;32mmaster[m[33m, [m[1;32magents/project-architecture-analysis-8f3ca400[m[33m, [m[1;32magents/project-architecture-analysis[m[33m, [m[1;32magents/auth-system-debug-investigation-58aa8efa[m[33m, [m[1;32magents/auth-system-debug-investigation[m[33m)[m Attendance module working before V9 migration
+* [33m4f7fb60[m V9 foundation complete - types and storage verified
+* [33m52804e2[m Configure EAS build for beta release
+* [33m3881ee5[m[33m ([m[1;33mtag: [m[1;33mv8.6[m[33m)[m V8.6 dynamic service management
+* [33m448563f[m[33m ([m[1;33mtag: [m[1;33mv8.5[m[33m)[m V8.5 dynamic worker management
+* [33m6bca938[m[33m ([m[1;33mtag: [m[1;33mv8.0[m[33m)[m V8 expense management and profit tracking
+* [33m26f3fcd[m V7.1 home screen simplification and navigation cleanup
+* [33m5608c65[m V7 worker attendance settlement and analytics
+* [33mb60be61[m[33m ([m[1;33mtag: [m[1;33mv6.0[m[33m)[m V6 analytics dashboard
+* [33m548037b[m[33m ([m[1;33mtag: [m[1;33mv5.0[m[33m)[m V5 reports history and report details
+* [33m3c40125[m[33m ([m[1;33mtag: [m[1;33mv4.0[m[33m)[m V4 day close and start new day functionality
+* [33mf721c1d[m V3 dashboard with cash and upi totals
+* [33mc3880ec[m V2 AsyncStorage working
+* [33me262651[m V1 working salon app
+* [33m124ee98[m Session 27632b93-a700-42fe-84bd-4a6cee9dc038 - checkpoint turn 0
+* [33m850c923[m Session b56e1d98-f0c6-496d-b415-6cf9dd17a7cb - checkpoint turn 0
