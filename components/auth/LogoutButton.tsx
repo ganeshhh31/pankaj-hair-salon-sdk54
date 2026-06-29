@@ -1,4 +1,3 @@
-import { useRouter } from "expo-router";
 import React from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity } from "react-native";
 
@@ -7,7 +6,6 @@ import { SalonColors } from "@/constants/salon";
 
 export const LogoutButton: React.FC = () => {
   const { logout } = useAuth();
-  const router = useRouter();
 
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to log out?", [
@@ -17,7 +15,6 @@ export const LogoutButton: React.FC = () => {
         style: "destructive",
         onPress: async () => {
           await logout();
-          router.replace("/");
         },
       },
     ]);

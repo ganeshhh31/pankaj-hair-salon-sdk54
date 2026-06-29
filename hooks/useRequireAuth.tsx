@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import { SalonColors } from "@/constants/salon";
@@ -19,19 +19,35 @@ export const useRequireAuth = (options: UseRequireAuthOptions = {}) => {
   const { status, user, isLoading } = useAuthContext();
   const router = useRouter();
 
-  useEffect(() => {
-    if (isLoading) return;
+  // Prevent repeated redirects while the layout is unmounting
+  const hasRedirected = useRef(false);
 
-    if (status !== "authenticated" || !user) {
-      router.replace(redirectTo as "/");
+  useEffect(() => {
+    if (isLoading) {
+      hasRedirected.current = false;
       return;
     }
 
+    if (status !== "authenticated") {
+      if (!hasRedirected.current) {
+        hasRedirected.current = true;
+        router.replace(redirectTo as "/");
+      }
+      return;
+    }
+
+    // User became authenticated again, allow future redirects
+    hasRedirected.current = false;
+
     if (allowedRole && !isRoleAllowed(user, allowedRole)) {
-      if (user.role === "OWNER") {
-        router.replace("/(owner)/(tabs)" as "/");
-      } else {
-        router.replace("/(worker)" as "/");
+      if (!hasRedirected.current) {
+        hasRedirected.current = true;
+
+        if (user?.role === "OWNER") {
+          router.replace("/(owner)/(tabs)" as "/");
+        } else {
+          router.replace("/(worker)" as "/");
+        }
       }
     }
   }, [isLoading, status, user, allowedRole, redirectTo, router]);
