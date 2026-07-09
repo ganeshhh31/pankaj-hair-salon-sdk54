@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLocalization } from "@/src/localization/languageContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Picker } from "@react-native-picker/picker";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
+  AppState,
+  Modal,
+  ScrollView,
   StyleSheet,
   Text,
-  View,
-  TouchableOpacity,
   TextInput,
-  ScrollView,
-  Alert,
-  Modal,
-} from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 // Worker type definition
 interface Worker {
@@ -27,19 +29,20 @@ interface Service {
 }
 
 // Service Modal Component - MOVED OUTSIDE to prevent re-renders
-const ServiceModalComponent = ({ 
-  visible, 
-  onClose, 
-  onSave, 
-  editingService 
-}: { 
-  visible: boolean; 
-  onClose: () => void; 
+const ServiceModalComponent = ({
+  visible,
+  onClose,
+  onSave,
+  editingService,
+}: {
+  visible: boolean;
+  onClose: () => void;
   onSave: (name: string, price: number) => void;
   editingService: Service | null;
 }) => {
-  const [serviceFormName, setServiceFormName] = useState('');
-  const [serviceFormPrice, setServiceFormPrice] = useState('');
+  const { t } = useLocalization();
+  const [serviceFormName, setServiceFormName] = useState("");
+  const [serviceFormPrice, setServiceFormPrice] = useState("");
 
   // Reset form when modal opens or editing service changes
   React.useEffect(() => {
@@ -48,8 +51,8 @@ const ServiceModalComponent = ({
         setServiceFormName(editingService.name);
         setServiceFormPrice(editingService.price.toString());
       } else {
-        setServiceFormName('');
-        setServiceFormPrice('');
+        setServiceFormName("");
+        setServiceFormPrice("");
       }
     }
   }, [visible, editingService]);
@@ -57,16 +60,16 @@ const ServiceModalComponent = ({
   const handleSave = () => {
     const price = parseFloat(serviceFormPrice);
     if (!serviceFormName.trim()) {
-      Alert.alert('Error', 'Service name cannot be empty');
+      Alert.alert(t("error"), t("serviceNameCannotBeEmpty"));
       return;
     }
     if (isNaN(price) || price <= 0) {
-      Alert.alert('Error', 'Price must be greater than 0');
+      Alert.alert(t("error"), t("priceMustBeValid"));
       return;
     }
     onSave(serviceFormName.trim(), price);
-    setServiceFormName('');
-    setServiceFormPrice('');
+    setServiceFormName("");
+    setServiceFormPrice("");
   };
 
   return (
@@ -74,44 +77,47 @@ const ServiceModalComponent = ({
       animationType="slide"
       transparent={true}
       visible={visible}
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>
-            {editingService ? '✏️ Edit Service' : '➕ Add New Service'}
+            {editingService ? t("editService") : t("addNewService")}
           </Text>
-          
-          <Text style={styles.label}>Service Name</Text>
+
+          <Text style={styles.label}>{t("serviceName")}</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Hair Spa"
+            placeholder={t("placeholderServiceName")}
             value={serviceFormName}
             onChangeText={setServiceFormName}
             placeholderTextColor="#aaa"
             autoFocus={true}
           />
-          
-          <Text style={styles.label}>Price (₹)</Text>
+
+          <Text style={styles.label}>{t("price")}</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. 800"
+            placeholder={t("placeholderPrice")}
             value={serviceFormPrice}
             onChangeText={setServiceFormPrice}
             keyboardType="numeric"
             placeholderTextColor="#aaa"
           />
-          
+
           <View style={styles.modalButtons}>
             <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
-              onPress={onClose}>
+              onPress={onClose}
+            >
               <Text style={styles.buttonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, styles.saveButton]}
-              onPress={handleSave}>
+              onPress={handleSave}
+            >
               <Text style={styles.buttonText}>
-                {editingService ? 'Update' : 'Save'}
+                {editingService ? t("update") : t("saveLabel")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -121,29 +127,209 @@ const ServiceModalComponent = ({
   );
 };
 
+interface Transaction {
+  id: number;
+  worker: string;
+  service: string;
+  amount: number;
+  paymentMode: string;
+  date: string;
+  time: string;
+}
+
+const isTodayTransaction = (transaction: Transaction) =>
+  transaction.date === new Date().toLocaleDateString();
+
+const normalizeTransaction = (item: any): Transaction => ({
+  id: typeof item.id === "number" ? item.id : Number(item.id) || Date.now(),
+  worker: item.worker ?? "",
+  service: item.service ?? "",
+  amount: Number(item.amount) || 0,
+  paymentMode: item.paymentMode ?? "Cash",
+  date: item.date ?? new Date().toLocaleDateString(),
+  time:
+    item.time ??
+    new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }),
+});
+
+const SummaryCard = React.memo(
+  ({
+    totalCollection,
+    cashTotal,
+    upiTotal,
+    showCollection,
+    toggleCollectionVisibility,
+  }: {
+    totalCollection: number;
+    cashTotal: number;
+    upiTotal: number;
+    showCollection: boolean;
+    toggleCollectionVisibility: () => void;
+  }) => {
+    const { t } = useLocalization();
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>{t("todaysCollection")}</Text>
+          <TouchableOpacity onPress={toggleCollectionVisibility}>
+            <Text style={styles.eyeIcon}>{showCollection ? "🙈" : "👁"}</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.dashboardAmount}>
+          {showCollection ? `₹${totalCollection}` : "*****"}
+        </Text>
+        <View style={styles.collectionRow}>
+          <View style={styles.collectionPill}>
+            <Text style={styles.collectionPillLabel}>{t("cash")}</Text>
+            <Text style={styles.collectionPillAmount}>
+              {showCollection ? `₹${cashTotal}` : "***"}
+            </Text>
+          </View>
+          <View style={styles.collectionPill}>
+            <Text style={styles.collectionPillLabel}>{t("upi")}</Text>
+            <Text style={styles.collectionPillAmount}>
+              {showCollection ? `₹${upiTotal}` : "***"}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  },
+);
+
+const WorkerEarningsSection = React.memo(
+  ({
+    activeWorkers,
+    getWorkerTotal,
+    settlements,
+  }: {
+    activeWorkers: Worker[];
+    getWorkerTotal: (workerName: string) => number;
+    settlements: any[];
+  }) => {
+    const { t } = useLocalization();
+    return (
+      <View>
+        <Text style={styles.sectionHeading}>{t("workerEarnings")}</Text>
+        {activeWorkers.length === 0 ? (
+          <Text style={styles.emptyText}>{t("noActiveWorkersYet")}</Text>
+        ) : (
+          activeWorkers.map((worker) => {
+            const isSettled = settlements.some((s) => s.worker === worker.name);
+            return (
+              <View key={worker.id} style={styles.workerCard}>
+                <View>
+                  <Text style={styles.workerName}>
+                    {worker.name}
+                    {isSettled ? "  ✅" : ""}
+                  </Text>
+                </View>
+                <View>
+                  <Text style={styles.workerAmount}>
+                    ₹{getWorkerTotal(worker.name)}
+                  </Text>
+                </View>
+              </View>
+            );
+          })
+        )}
+      </View>
+    );
+  },
+);
+
+const TransactionCard = React.memo(
+  ({ transaction }: { transaction: Transaction }) => (
+    <View style={styles.transactionCard}>
+      <Text style={styles.transactionTime}>{transaction.time}</Text>
+      <Text style={styles.workerName}>{transaction.worker}</Text>
+      <Text style={styles.transactionService}>{transaction.service}</Text>
+      <View style={styles.transactionMetaRow}>
+        <Text style={styles.transactionAmount}>₹{transaction.amount}</Text>
+        <Text style={styles.transactionMode}>{transaction.paymentMode}</Text>
+      </View>
+    </View>
+  ),
+);
+
+const RecentTransactionsSection = React.memo(
+  ({
+    transactions,
+    onViewAll,
+    showViewAll,
+  }: {
+    transactions: Transaction[];
+    onViewAll: () => void;
+    showViewAll: boolean;
+  }) => {
+    const { t } = useLocalization();
+    return (
+      <View>
+        <Text style={styles.sectionHeading}>{t("recentTransactions")}</Text>
+        {transactions.length === 0 ? (
+          <Text style={styles.emptyStateText}>
+            {t("noTransactionsYetToday")}
+          </Text>
+        ) : (
+          <>
+            {transactions.map((transaction) => (
+              <TransactionCard key={transaction.id} transaction={transaction} />
+            ))}
+            {showViewAll ? (
+              <TouchableOpacity
+                style={styles.viewAllButton}
+                onPress={onViewAll}
+              >
+                <Text style={styles.viewAllText}>
+                  {t("viewAllTransactions")}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </>
+        )}
+      </View>
+    );
+  },
+);
+
 export default function HomeScreen() {
   // V8.6 - Dynamic services
   const [services, setServices] = useState<Service[]>([]);
-  const [selectedService, setSelectedService] = useState('');
-  const [amount, setAmount] = useState('');
-  
+  const [selectedService, setSelectedService] = useState("");
+  const [amount, setAmount] = useState("");
+
   // V8.6 - Service Management Modal state
   const [serviceModalVisible, setServiceModalVisible] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
 
-  const expenseCategories = [
-    'Rent', 'Electricity', 'Products', 'Salary',
-    'Maintenance', 'Water', 'Internet', 'Tea & Snacks', 'Other',
-  ];
+  const { t } = useLocalization();
+
+  const expenseCategoryKeys = [
+    "expenseCategoryRent",
+    "expenseCategoryElectricity",
+    "expenseCategoryProducts",
+    "expenseCategorySalary",
+    "expenseCategoryMaintenance",
+    "expenseCategoryWater",
+    "expenseCategoryInternet",
+    "expenseCategoryTeaSnacks",
+    "expenseCategoryOther",
+  ] as const;
+
+  const expenseCategories = expenseCategoryKeys.map((key) => t(key));
 
   // screen values: 'home' | 'workers' | 'reports' | 'analytics' | 'expenses' | 'transaction' | 'services'
-  const [screen, setScreen] = useState('home');
-  const [activeTab, setActiveTab] = useState('home');
+  const [screen, setScreen] = useState("home");
+  const [activeTab, setActiveTab] = useState("home");
 
-  const [selectedWorker, setSelectedWorker] = useState('');
-  const [paymentMode, setPaymentMode] = useState('Cash');
+  const [selectedWorker, setSelectedWorker] = useState("");
+  const [paymentMode, setPaymentMode] = useState("Cash");
 
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [totalCollection, setTotalCollection] = useState(0);
   const [cashTotal, setCashTotal] = useState(0);
   const [upiTotal, setUpiTotal] = useState(0);
@@ -155,32 +341,40 @@ export default function HomeScreen() {
 
   // V8.5 - Dynamic workers
   const [workers, setWorkers] = useState<Worker[]>([]);
-  const [newWorkerName, setNewWorkerName] = useState('');
+  const [newWorkerName, setNewWorkerName] = useState("");
   const [settlements, setSettlements] = useState<any[]>([]);
 
   // V8 — Expenses
   const [expenses, setExpenses] = useState<any[]>([]);
-  const [expenseAmount, setExpenseAmount] = useState('');
-  const [expenseCategory, setExpenseCategory] = useState('Rent');
-  const [expenseNote, setExpenseNote] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseCategory, setExpenseCategory] = useState("Rent");
+  const [expenseNote, setExpenseNote] = useState("");
 
   useEffect(() => {
     loadAllData();
+
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        loadAllData();
+      }
+    });
+
+    return () => subscription.remove();
   }, []);
 
   // V8.6 - Initialize default services if none exist
   const initializeDefaultServices = async () => {
     const defaultServices: Service[] = [
-      { id: '1', name: 'Hair Cut', price: 150 },
-      { id: '2', name: 'Beard', price: 80 },
-      { id: '3', name: 'Facial', price: 500 },
-      { id: '4', name: 'Bleach', price: 300 },
-      { id: '5', name: 'Hair Treatment', price: 700 },
-      { id: '6', name: 'Hair Color', price: 600 },
-      { id: '7', name: 'Head Massage', price: 200 },
+      { id: "1", name: "Hair Cut", price: 150 },
+      { id: "2", name: "Beard", price: 80 },
+      { id: "3", name: "Facial", price: 500 },
+      { id: "4", name: "Bleach", price: 300 },
+      { id: "5", name: "Hair Treatment", price: 700 },
+      { id: "6", name: "Hair Color", price: 600 },
+      { id: "7", name: "Head Massage", price: 200 },
     ];
-    
-    await AsyncStorage.setItem('services', JSON.stringify(defaultServices));
+
+    await AsyncStorage.setItem("services", JSON.stringify(defaultServices));
     return defaultServices;
   };
 
@@ -188,11 +382,11 @@ export default function HomeScreen() {
   const addService = async (name: string, price: number) => {
     // Check for duplicates
     const nameExists = services.some(
-      s => s.name.toLowerCase() === name.toLowerCase()
+      (s) => s.name.toLowerCase() === name.toLowerCase(),
     );
-    
+
     if (nameExists) {
-      Alert.alert('Error', 'A service with this name already exists');
+      Alert.alert("Error", "A service with this name already exists");
       return;
     }
 
@@ -204,8 +398,8 @@ export default function HomeScreen() {
 
     const updatedServices = [...services, newService];
     setServices(updatedServices);
-    await AsyncStorage.setItem('services', JSON.stringify(updatedServices));
-    Alert.alert('Success', `${newService.name} added successfully`);
+    await AsyncStorage.setItem("services", JSON.stringify(updatedServices));
+    Alert.alert("Success", `${newService.name} added successfully`);
   };
 
   // V8.6 - Edit service
@@ -214,23 +408,22 @@ export default function HomeScreen() {
 
     // Check for duplicates (excluding current service)
     const nameExists = services.some(
-      s => s.id !== editingService.id && 
-      s.name.toLowerCase() === name.toLowerCase()
+      (s) =>
+        s.id !== editingService.id &&
+        s.name.toLowerCase() === name.toLowerCase(),
     );
-    
+
     if (nameExists) {
-      Alert.alert('Error', 'A service with this name already exists');
+      Alert.alert("Error", "A service with this name already exists");
       return;
     }
 
-    const updatedServices = services.map(s =>
-      s.id === editingService.id
-        ? { ...s, name: name, price: price }
-        : s
+    const updatedServices = services.map((s) =>
+      s.id === editingService.id ? { ...s, name: name, price: price } : s,
     );
-    
+
     setServices(updatedServices);
-    await AsyncStorage.setItem('services', JSON.stringify(updatedServices));
+    await AsyncStorage.setItem("services", JSON.stringify(updatedServices));
 
     // Update selected service if it was edited
     if (selectedService === editingService.name) {
@@ -238,7 +431,7 @@ export default function HomeScreen() {
       setAmount(price.toString());
     }
 
-    Alert.alert('Success', `${name} updated successfully`);
+    Alert.alert("Success", `${name} updated successfully`);
   };
 
   // V8.6 - Delete service with last service protection
@@ -247,14 +440,14 @@ export default function HomeScreen() {
     if (services.length === 1) {
       Alert.alert(
         "Cannot Delete",
-        "At least one service must remain. Add a new service before deleting this one."
+        "At least one service must remain. Add a new service before deleting this one.",
       );
       return;
     }
 
     // Check if service appears in any historical report
-    const serviceInReports = reports.some(report => 
-      report.serviceReport?.some((s: any) => s.service === serviceName)
+    const serviceInReports = reports.some((report) =>
+      report.serviceReport?.some((s: any) => s.service === serviceName),
     );
 
     let warningMessage = `Delete ${serviceName}?`;
@@ -262,34 +455,36 @@ export default function HomeScreen() {
       warningMessage += `\n\n⚠️ This service appears in historical reports. Deleting it will not affect existing reports, but it will be removed from future transactions.`;
     }
 
-    Alert.alert(
-      'Delete Service',
-      warningMessage,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const updatedServices = services.filter(s => s.id !== serviceId);
-            setServices(updatedServices);
-            await AsyncStorage.setItem('services', JSON.stringify(updatedServices));
+    Alert.alert("Delete Service", warningMessage, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const updatedServices = services.filter((s) => s.id !== serviceId);
+          setServices(updatedServices);
+          await AsyncStorage.setItem(
+            "services",
+            JSON.stringify(updatedServices),
+          );
 
-            // If deleted service was selected, reset selection
-            if (selectedService === serviceName) {
-              if (updatedServices.length > 0) {
-                handleServiceChange(updatedServices[0].name, updatedServices[0].price);
-              } else {
-                setSelectedService('');
-                setAmount('');
-              }
+          // If deleted service was selected, reset selection
+          if (selectedService === serviceName) {
+            if (updatedServices.length > 0) {
+              handleServiceChange(
+                updatedServices[0].name,
+                updatedServices[0].price,
+              );
+            } else {
+              setSelectedService("");
+              setAmount("");
             }
+          }
 
-            Alert.alert('Success', `${serviceName} deleted successfully`);
-          },
+          Alert.alert("Success", `${serviceName} deleted successfully`);
         },
-      ]
-    );
+      },
+    ]);
   };
 
   // V8.6 - Open service modal for add/edit
@@ -323,28 +518,28 @@ export default function HomeScreen() {
   // V8.5 - Initialize default workers if none exist
   const initializeDefaultWorkers = async () => {
     const defaultWorkers: Worker[] = [
-      { id: '1', name: 'Pankaj', active: true },
-      { id: '2', name: 'Rohit', active: true },
-      { id: '3', name: 'Amit', active: true },
+      { id: "1", name: "Pankaj", active: true },
+      { id: "2", name: "Ajit", active: true },
+      { id: "3", name: "Abhijit", active: true },
     ];
-    
-    await AsyncStorage.setItem('workers', JSON.stringify(defaultWorkers));
+
+    await AsyncStorage.setItem("workers", JSON.stringify(defaultWorkers));
     return defaultWorkers;
   };
 
   // V8.5 - Add new worker
   const addWorker = async () => {
     if (!newWorkerName.trim()) {
-      Alert.alert('Error', 'Worker name cannot be empty');
+      Alert.alert("Error", "Worker name cannot be empty");
       return;
     }
 
     const nameExists = workers.some(
-      w => w.name.toLowerCase() === newWorkerName.trim().toLowerCase()
+      (w) => w.name.toLowerCase() === newWorkerName.trim().toLowerCase(),
     );
-    
+
     if (nameExists) {
-      Alert.alert('Error', 'A worker with this name already exists');
+      Alert.alert("Error", "A worker with this name already exists");
       return;
     }
 
@@ -356,86 +551,87 @@ export default function HomeScreen() {
 
     const updatedWorkers = [...workers, newWorker];
     setWorkers(updatedWorkers);
-    await AsyncStorage.setItem('workers', JSON.stringify(updatedWorkers));
+    await AsyncStorage.setItem("workers", JSON.stringify(updatedWorkers));
 
-    setNewWorkerName('');
-    Alert.alert('Success', `${newWorker.name} added successfully`);
+    setNewWorkerName("");
+    Alert.alert("Success", `${newWorker.name} added successfully`);
   };
 
   // V8.5 - Deactivate worker
   const deactivateWorker = async (workerId: string, workerName: string) => {
-    const activeCount = workers.filter(w => w.active).length;
-    
-    if (activeCount === 1 && workers.find(w => w.id === workerId)?.active) {
+    const activeCount = workers.filter((w) => w.active).length;
+
+    if (activeCount === 1 && workers.find((w) => w.id === workerId)?.active) {
       Alert.alert(
         "Cannot Deactivate",
-        "At least one worker must remain active. Please add another worker before deactivating this one."
+        "At least one worker must remain active. Please add another worker before deactivating this one.",
       );
       return;
     }
 
-    const hasTransactions = transactions.some(t => t.worker === workerName);
+    const hasTransactions = transactions.some((t) => t.worker === workerName);
     if (hasTransactions) {
       Alert.alert(
-        'Cannot Deactivate',
-        `${workerName} has transactions today. Please close the day first before deactivating.`
+        "Cannot Deactivate",
+        `${workerName} has transactions today. Please close the day first before deactivating.`,
       );
       return;
     }
 
     Alert.alert(
-      'Deactivate Worker',
+      "Deactivate Worker",
       `Are you sure you want to deactivate ${workerName}?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Deactivate',
-          style: 'destructive',
+          text: "Deactivate",
+          style: "destructive",
           onPress: async () => {
-            const updatedWorkers = workers.map(w => 
-              w.id === workerId ? { ...w, active: false } : w
+            const updatedWorkers = workers.map((w) =>
+              w.id === workerId ? { ...w, active: false } : w,
             );
             setWorkers(updatedWorkers);
-            await AsyncStorage.setItem('workers', JSON.stringify(updatedWorkers));
+            await AsyncStorage.setItem(
+              "workers",
+              JSON.stringify(updatedWorkers),
+            );
 
             if (selectedWorker === workerName) {
-              const activeWorkersList = updatedWorkers.filter(w => w.active);
-              setSelectedWorker(activeWorkersList.length > 0 ? activeWorkersList[0].name : '');
+              const activeWorkersList = updatedWorkers.filter((w) => w.active);
+              setSelectedWorker(
+                activeWorkersList.length > 0 ? activeWorkersList[0].name : "",
+              );
             }
 
-            Alert.alert('Success', `${workerName} has been deactivated`);
+            Alert.alert("Success", `${workerName} has been deactivated`);
           },
         },
-      ]
+      ],
     );
   };
 
   // V8.5 - Reactivate worker
   const reactivateWorker = async (workerId: string, workerName: string) => {
-    Alert.alert(
-      'Reactivate Worker',
-      `Reactivate ${workerName}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reactivate',
-          onPress: async () => {
-            const updatedWorkers = workers.map(w => 
-              w.id === workerId ? { ...w, active: true } : w
-            );
-            setWorkers(updatedWorkers);
-            await AsyncStorage.setItem('workers', JSON.stringify(updatedWorkers));
-            Alert.alert('Success', `${workerName} has been reactivated`);
-          },
+    Alert.alert("Reactivate Worker", `Reactivate ${workerName}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reactivate",
+        onPress: async () => {
+          const updatedWorkers = workers.map((w) =>
+            w.id === workerId ? { ...w, active: true } : w,
+          );
+          setWorkers(updatedWorkers);
+          await AsyncStorage.setItem("workers", JSON.stringify(updatedWorkers));
+          Alert.alert("Success", `${workerName} has been reactivated`);
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const loadAllData = async () => {
     try {
       // V8.6 - Load services with proper migration
-      let savedServices = await AsyncStorage.getItem('services');
+      let savedServices = await AsyncStorage.getItem("services");
       let loadedServices: Service[] = [];
 
       if (!savedServices) {
@@ -443,11 +639,16 @@ export default function HomeScreen() {
         loadedServices = await initializeDefaultServices();
       } else {
         const parsedServices = JSON.parse(savedServices);
-        
+
         // Check if old format (array of strings)
-        if (parsedServices.length > 0 && typeof parsedServices[0] === 'string') {
+        if (
+          parsedServices.length > 0 &&
+          typeof parsedServices[0] === "string"
+        ) {
           // Old format detected - reinitialize with defaults
-          console.log('Old service format detected, migrating to new format...');
+          console.log(
+            "Old service format detected, migrating to new format...",
+          );
           loadedServices = await initializeDefaultServices();
         } else {
           // New format - just ensure all fields exist
@@ -457,12 +658,12 @@ export default function HomeScreen() {
             price: s.price || 100, // Default price if missing
           }));
         }
-        
-        await AsyncStorage.setItem('services', JSON.stringify(loadedServices));
+
+        await AsyncStorage.setItem("services", JSON.stringify(loadedServices));
       }
 
       setServices(loadedServices);
-      
+
       // Set default selected service
       if (loadedServices.length > 0 && !selectedService) {
         setSelectedService(loadedServices[0].name);
@@ -470,7 +671,7 @@ export default function HomeScreen() {
       }
 
       // V8.5 - Load workers
-      let savedWorkers = await AsyncStorage.getItem('workers');
+      let savedWorkers = await AsyncStorage.getItem("workers");
       let loadedWorkers: Worker[] = [];
 
       if (!savedWorkers) {
@@ -482,41 +683,48 @@ export default function HomeScreen() {
           name: w.name || w,
           active: w.active ?? true,
         }));
-        await AsyncStorage.setItem('workers', JSON.stringify(loadedWorkers));
+        await AsyncStorage.setItem("workers", JSON.stringify(loadedWorkers));
       }
 
       setWorkers(loadedWorkers);
-      
-      const activeWorkersList = loadedWorkers.filter(w => w.active);
+
+      const activeWorkersList = loadedWorkers.filter((w) => w.active);
       if (activeWorkersList.length > 0 && !selectedWorker) {
         setSelectedWorker(activeWorkersList[0].name);
       }
 
       // Load transactions
-      const saved = await AsyncStorage.getItem('transactions');
+      const saved = await AsyncStorage.getItem("transactions");
       if (saved) {
-        const parsed = JSON.parse(saved);
-        setTransactions(parsed);
-        const total = parsed.reduce((sum: number, item: any) => sum + item.amount, 0);
-        const cash = parsed.filter((item: any) => item.paymentMode === 'Cash').reduce((sum: number, item: any) => sum + item.amount, 0);
-        const upi = parsed.filter((item: any) => item.paymentMode === 'UPI').reduce((sum: number, item: any) => sum + item.amount, 0);
+        const parsed = JSON.parse(saved) || [];
+        const normalized = parsed.map(normalizeTransaction);
+        setTransactions(normalized);
+        const total = normalized.reduce(
+          (sum: number, item: Transaction) => sum + item.amount,
+          0,
+        );
+        const cash = normalized
+          .filter((item: Transaction) => item.paymentMode === "Cash")
+          .reduce((sum: number, item: Transaction) => sum + item.amount, 0);
+        const upi = normalized
+          .filter((item: Transaction) => item.paymentMode === "UPI")
+          .reduce((sum: number, item: Transaction) => sum + item.amount, 0);
         setTotalCollection(total);
         setCashTotal(cash);
         setUpiTotal(upi);
       }
 
-      const savedReports = await AsyncStorage.getItem('reports');
+      const savedReports = await AsyncStorage.getItem("reports");
       if (savedReports) setReports(JSON.parse(savedReports));
 
-      const savedDayClosed = await AsyncStorage.getItem('dayClosed');
-      if (savedDayClosed === 'true') setDayClosed(true);
+      const savedDayClosed = await AsyncStorage.getItem("dayClosed");
+      if (savedDayClosed === "true") setDayClosed(true);
 
-      const savedSettlements = await AsyncStorage.getItem('settlements');
+      const savedSettlements = await AsyncStorage.getItem("settlements");
       if (savedSettlements) setSettlements(JSON.parse(savedSettlements));
 
-      const savedExpenses = await AsyncStorage.getItem('expenses');
+      const savedExpenses = await AsyncStorage.getItem("expenses");
       if (savedExpenses) setExpenses(JSON.parse(savedExpenses));
-
     } catch (error) {
       console.log(error);
     }
@@ -527,20 +735,25 @@ export default function HomeScreen() {
     // CRITICAL FIX: Validate amount before saving
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
       Alert.alert(
-        'Invalid Amount',
-        'Please enter a valid amount greater than 0'
+        "Invalid Amount",
+        "Please enter a valid amount greater than 0",
       );
       return;
     }
 
-    const newTransaction = {
-      id: Date.now(),
+    const now = new Date();
+    const newTransaction: Transaction = {
+      id: now.getTime(),
       worker: selectedWorker,
       service: selectedService,
       amount: Number(amount),
       paymentMode,
-      date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString(),
+      date: now.toLocaleDateString(),
+      time: now.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }),
     };
 
     const updatedTransactions = [newTransaction, ...transactions];
@@ -548,29 +761,34 @@ export default function HomeScreen() {
 
     const updatedTotal = totalCollection + Number(amount);
     setTotalCollection(updatedTotal);
-    if (paymentMode === 'Cash') setCashTotal(cashTotal + Number(amount));
-    if (paymentMode === 'UPI') setUpiTotal(upiTotal + Number(amount));
+    if (paymentMode === "Cash") setCashTotal(cashTotal + Number(amount));
+    if (paymentMode === "UPI") setUpiTotal(upiTotal + Number(amount));
 
     try {
-      await AsyncStorage.setItem('transactions', JSON.stringify(updatedTransactions));
+      await AsyncStorage.setItem(
+        "transactions",
+        JSON.stringify(updatedTransactions),
+      );
     } catch (error) {
       console.log(error);
     }
 
-    const activeWorkersList = workers.filter(w => w.active);
-    setSelectedWorker(activeWorkersList.length > 0 ? activeWorkersList[0].name : '');
+    const activeWorkersList = workers.filter((w) => w.active);
+    setSelectedWorker(
+      activeWorkersList.length > 0 ? activeWorkersList[0].name : "",
+    );
     if (services.length > 0) {
       setSelectedService(services[0].name);
       setAmount(services[0].price.toString());
     }
-    setPaymentMode('Cash');
-    navigateTo('home');
+    setPaymentMode("Cash");
+    navigateTo("home");
   };
 
   // V8 — Save Expense
   const saveExpense = async () => {
     if (!expenseAmount || Number(expenseAmount) <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid expense amount.');
+      Alert.alert("Invalid Amount", "Please enter a valid expense amount.");
       return;
     }
 
@@ -582,39 +800,50 @@ export default function HomeScreen() {
       note: expenseNote.trim(),
       date: now.toLocaleDateString(),
       dateISO: now.toISOString(),
-      time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+      time: now.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      }),
     };
 
     const updatedExpenses = [newExpense, ...expenses];
     setExpenses(updatedExpenses);
 
     try {
-      await AsyncStorage.setItem('expenses', JSON.stringify(updatedExpenses));
+      await AsyncStorage.setItem("expenses", JSON.stringify(updatedExpenses));
     } catch (error) {
       console.log(error);
     }
 
-    setExpenseAmount('');
-    setExpenseCategory('Rent');
-    setExpenseNote('');
+    setExpenseAmount("");
+    setExpenseCategory("Rent");
+    setExpenseNote("");
 
-    Alert.alert('Saved', `Expense of ₹${newExpense.amount} (${newExpense.category}) saved ✅`);
+    Alert.alert(
+      "Saved",
+      `Expense of ₹${newExpense.amount} (${newExpense.category}) saved ✅`,
+    );
   };
 
   // V8 — Delete Expense
   const deleteExpense = async (id: number) => {
-    Alert.alert('Delete Expense', 'Are you sure you want to delete this expense?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          const updated = expenses.filter((e) => e.id !== id);
-          setExpenses(updated);
-          await AsyncStorage.setItem('expenses', JSON.stringify(updated));
+    Alert.alert(
+      "Delete Expense",
+      "Are you sure you want to delete this expense?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const updated = expenses.filter((e) => e.id !== id);
+            setExpenses(updated);
+            await AsyncStorage.setItem("expenses", JSON.stringify(updated));
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   // V8 — Expense helpers
@@ -631,7 +860,10 @@ export default function HomeScreen() {
     return expenses
       .filter((e) => {
         const d = e.dateISO ? new Date(e.dateISO) : new Date(e.date);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        return (
+          d.getMonth() === now.getMonth() &&
+          d.getFullYear() === now.getFullYear()
+        );
       })
       .reduce((sum, e) => sum + e.amount, 0);
   };
@@ -641,14 +873,20 @@ export default function HomeScreen() {
     return reports
       .filter((r) => {
         const d = r.dateISO ? new Date(r.dateISO) : new Date(r.date);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        return (
+          d.getMonth() === now.getMonth() &&
+          d.getFullYear() === now.getFullYear()
+        );
       })
       .reduce((sum, r) => sum + r.totalCollection, 0);
   };
 
   const closeDay = () => {
     if (totalCollection === 0) {
-      Alert.alert('No Transactions', 'Add at least one transaction before closing the day.');
+      Alert.alert(
+        "No Transactions",
+        "Add at least one transaction before closing the day.",
+      );
       return;
     }
 
@@ -656,31 +894,40 @@ export default function HomeScreen() {
     const todayProfit = totalCollection - todayExpenseTotal;
 
     Alert.alert(
-      'Close Day',
+      "Close Day",
       `Revenue: ₹${totalCollection}\nExpenses: ₹${todayExpenseTotal}\nProfit: ₹${todayProfit}\n\nCash: ₹${cashTotal}  UPI: ₹${upiTotal}\n\nClose the day?`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'Close Day',
+          text: "Close Day",
           onPress: async () => {
             // FIX: Only include active workers in reports
             const workerReport = workers
-              .filter(w => w.active)
+              .filter((w) => w.active)
               .map((worker) => {
                 const workDone = getWorkerTotal(worker.name);
-                return { worker: worker.name, workDone, share: worker.name === 'Pankaj' ? workDone : workDone / 2 };
+                return {
+                  worker: worker.name,
+                  workDone,
+                  share: worker.name === "Pankaj" ? workDone : workDone / 2,
+                };
               });
 
             const now = new Date();
             const serviceReport = services.map((service) => ({
               service: service.name,
-              count: transactions.filter((t) => t.service === service.name).length,
+              count: transactions.filter((t) => t.service === service.name)
+                .length,
             }));
 
             const report = {
               date: now.toLocaleDateString(),
               dateISO: now.toISOString(),
-              closedAt: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+              closedAt: now.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              }),
               totalCollection,
               cashTotal,
               upiTotal,
@@ -693,38 +940,77 @@ export default function HomeScreen() {
 
             const updatedReports = [report, ...reports];
             setReports(updatedReports);
-            await AsyncStorage.setItem('reports', JSON.stringify(updatedReports));
-            await AsyncStorage.removeItem('transactions');
+            await AsyncStorage.setItem(
+              "reports",
+              JSON.stringify(updatedReports),
+            );
+            await AsyncStorage.removeItem("transactions");
             setTransactions([]);
             setTotalCollection(0);
             setCashTotal(0);
             setUpiTotal(0);
-            await AsyncStorage.setItem('dayClosed', 'true');
+            await AsyncStorage.setItem("dayClosed", "true");
             setDayClosed(true);
           },
         },
-      ]
+      ],
     );
   };
 
   const startNewDay = async () => {
-    await AsyncStorage.removeItem('dayClosed');
-    await AsyncStorage.removeItem('settlements');
+    await AsyncStorage.removeItem("dayClosed");
+    await AsyncStorage.removeItem("settlements");
     setSettlements([]);
     setDayClosed(false);
   };
 
-  const activeWorkers = workers.filter(w => w.active).map(w => w.name);
+  const activeWorkerObjects = useMemo(
+    () => workers.filter((w) => w.active),
+    [workers],
+  );
+  const activeWorkerNames = useMemo(
+    () => activeWorkerObjects.map((w) => w.name),
+    [activeWorkerObjects],
+  );
+
+  const todayTransactions = useMemo(
+    () => transactions.filter(isTodayTransaction).sort((a, b) => b.id - a.id),
+    [transactions],
+  );
+  const visibleTransactions = useMemo(
+    () => todayTransactions.slice(0, 10),
+    [todayTransactions],
+  );
+  const latestTransaction = useMemo(
+    () => (todayTransactions.length > 0 ? todayTransactions[0] : null),
+    [todayTransactions],
+  );
+  const showViewAllTransactions = todayTransactions.length > 10;
 
   const getWorkerTotal = (workerName: string) => {
-    return transactions.filter((item) => item.worker === workerName).reduce((sum, item) => sum + item.amount, 0);
+    return transactions
+      .filter((item) => item.worker === workerName)
+      .reduce((sum, item) => sum + item.amount, 0);
   };
 
   const navigateTo = (s: string) => {
     setScreen(s);
-    if (['home', 'workers', 'reports', 'analytics', 'expenses', 'services'].includes(s)) {
+    if (
+      [
+        "home",
+        "workers",
+        "reports",
+        "analytics",
+        "expenses",
+        "services",
+      ].includes(s)
+    ) {
       setActiveTab(s);
     }
+  };
+
+  const navigateToTransactionHistory = () => {
+    setScreen("transactionHistory");
   };
 
   if (!isLoaded) {
@@ -739,18 +1025,24 @@ export default function HomeScreen() {
   const BottomNav = () => (
     <View style={styles.bottomNav}>
       {[
-        { key: 'home', label: '🏠 Home' },
-        { key: 'workers', label: '👨 Workers' },
-        { key: 'services', label: '✂️ Services' },
-        { key: 'reports', label: '📁 Reports' },
-        { key: 'analytics', label: '📊 Stats' },
-        { key: 'expenses', label: '💰 Expenses' },
+        { key: "home", label: "🏠 Home" },
+        { key: "workers", label: "👨 Workers" },
+        { key: "services", label: "✂️ Services" },
+        { key: "reports", label: "📁 Reports" },
+        { key: "analytics", label: "📊 Stats" },
+        { key: "expenses", label: "💰 Expenses" },
       ].map((tab) => (
         <TouchableOpacity
           key={tab.key}
           style={[styles.navTab, activeTab === tab.key && styles.navTabActive]}
-          onPress={() => navigateTo(tab.key)}>
-          <Text style={[styles.navTabText, activeTab === tab.key && styles.navTabTextActive]}>
+          onPress={() => navigateTo(tab.key)}
+        >
+          <Text
+            style={[
+              styles.navTabText,
+              activeTab === tab.key && styles.navTabTextActive,
+            ]}
+          >
             {tab.label}
           </Text>
         </TouchableOpacity>
@@ -759,7 +1051,7 @@ export default function HomeScreen() {
   );
 
   // ── Services Screen ──────────────────────────────
-  if (screen === 'services') {
+  if (screen === "services") {
     return (
       <View style={styles.screenWrapper}>
         <ScrollView style={styles.container}>
@@ -768,17 +1060,20 @@ export default function HomeScreen() {
           {/* Add Service Button */}
           <TouchableOpacity
             style={styles.addServiceButton}
-            onPress={() => openServiceModal()}>
+            onPress={() => openServiceModal()}
+          >
             <Text style={styles.addServiceButtonText}>➕ Add New Service</Text>
           </TouchableOpacity>
 
           {/* Services List */}
           <Text style={styles.sectionHeading}>Services List</Text>
-          
+
           {services.length === 0 ? (
             <View style={styles.emptyStateCard}>
               <Text style={styles.emptyStateText}>No services found</Text>
-              <Text style={styles.emptyStateSubText}>Add a service to continue</Text>
+              <Text style={styles.emptyStateSubText}>
+                Add a service to continue
+              </Text>
             </View>
           ) : (
             services.map((service) => (
@@ -790,12 +1085,14 @@ export default function HomeScreen() {
                 <View style={styles.serviceActions}>
                   <TouchableOpacity
                     style={styles.editServiceButton}
-                    onPress={() => openServiceModal(service)}>
+                    onPress={() => openServiceModal(service)}
+                  >
                     <Text style={styles.actionButtonText}>✏️ Edit</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.deleteServiceButton}
-                    onPress={() => deleteService(service.id, service.name)}>
+                    onPress={() => deleteService(service.id, service.name)}
+                  >
                     <Text style={styles.actionButtonText}>🗑 Delete</Text>
                   </TouchableOpacity>
                 </View>
@@ -827,20 +1124,28 @@ export default function HomeScreen() {
   }
 
   // ── Add Transaction Screen ───────────────────────
-  if (screen === 'transaction') {
-    if (activeWorkers.length === 0) {
+  if (screen === "transaction") {
+    if (activeWorkerNames.length === 0) {
       return (
         <View style={styles.screenWrapper}>
           <ScrollView style={styles.container}>
             <Text style={styles.title}>➕ Add Transaction</Text>
             <View style={styles.emptyStateCard}>
               <Text style={styles.emptyStateText}>No active workers found</Text>
-              <Text style={styles.emptyStateSubText}>Please add workers in Workers section first</Text>
+              <Text style={styles.emptyStateSubText}>
+                Please add workers in Workers section first
+              </Text>
             </View>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigateTo('workers')}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigateTo("workers")}
+            >
               <Text style={styles.buttonText}>Go to Workers</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigateTo('home')}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigateTo("home")}
+            >
               <Text style={styles.buttonText}>← Back</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -855,12 +1160,20 @@ export default function HomeScreen() {
             <Text style={styles.title}>➕ Add Transaction</Text>
             <View style={styles.emptyStateCard}>
               <Text style={styles.emptyStateText}>No services available</Text>
-              <Text style={styles.emptyStateSubText}>Please add services in Services section first</Text>
+              <Text style={styles.emptyStateSubText}>
+                Please add services in Services section first
+              </Text>
             </View>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigateTo('services')}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigateTo("services")}
+            >
               <Text style={styles.buttonText}>Go to Services</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigateTo('home')}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigateTo("home")}
+            >
               <Text style={styles.buttonText}>← Back</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -871,58 +1184,100 @@ export default function HomeScreen() {
     return (
       <View style={styles.screenWrapper}>
         <ScrollView style={styles.container}>
-          <Text style={styles.title}>➕ Add Transaction</Text>
+          <Text style={styles.title}>{t("addTransaction")}</Text>
 
-          <Text style={styles.label}>Worker</Text>
-          <Picker selectedValue={selectedWorker} onValueChange={(value) => setSelectedWorker(value)}>
-            {activeWorkers.map((worker) => (
+          <Text style={styles.label}>{t("worker")}</Text>
+          <Picker
+            selectedValue={selectedWorker}
+            onValueChange={(value) => setSelectedWorker(value)}
+          >
+            {activeWorkerNames.map((worker) => (
               <Picker.Item key={worker} label={worker} value={worker} />
             ))}
           </Picker>
 
-          <Text style={styles.label}>Service</Text>
-          <Picker 
-            selectedValue={selectedService} 
+          <Text style={styles.label}>{t("service")}</Text>
+          <Picker
+            selectedValue={selectedService}
             onValueChange={(value) => {
-              const service = services.find(s => s.name === value);
+              const service = services.find((s) => s.name === value);
               if (service) {
                 handleServiceChange(value, service.price);
               }
-            }}>
+            }}
+          >
             {services.map((service) => (
-              <Picker.Item key={service.id} label={`${service.name} (₹${service.price})`} value={service.name} />
+              <Picker.Item
+                key={service.id}
+                label={`${service.name} (₹${service.price})`}
+                value={service.name}
+              />
             ))}
           </Picker>
 
-          <Text style={styles.label}>Amount</Text>
+          <Text style={styles.label}>{t("amount")}</Text>
           <TextInput
             style={styles.input}
             value={amount}
             onChangeText={setAmount}
             keyboardType="numeric"
-            placeholder="Enter amount"
+            placeholder={t("enterAmount")}
           />
 
-          <Text style={styles.label}>Payment Mode</Text>
-          <Picker selectedValue={paymentMode} onValueChange={(value) => setPaymentMode(value)}>
-            <Picker.Item label="Cash" value="Cash" />
-            <Picker.Item label="UPI" value="UPI" />
+          <Text style={styles.label}>{t("paymentMode")}</Text>
+          <Picker
+            selectedValue={paymentMode}
+            onValueChange={(value) => setPaymentMode(value)}
+          >
+            <Picker.Item label={t("cashLabel")} value="Cash" />
+            <Picker.Item label={t("upiLabel")} value="UPI" />
           </Picker>
 
           <TouchableOpacity style={styles.saveButton} onPress={saveTransaction}>
-            <Text style={styles.buttonText}>✅ Save Transaction</Text>
+            <Text style={styles.buttonText}>{t("saveTransaction")}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.backButton} onPress={() => navigateTo('home')}>
-            <Text style={styles.buttonText}>← Back</Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigateTo("home")}
+          >
+            <Text style={styles.buttonText}>{t("back")}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
     );
   }
 
+  // ── Transaction History Screen ───────────────────
+  if (screen === "transactionHistory") {
+    return (
+      <View style={styles.screenWrapper}>
+        <ScrollView style={styles.container}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setScreen("home")}
+          >
+            <Text style={styles.buttonText}>{t("goBackToDashboard")}</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>{t("transactionsTitle")}</Text>
+          {todayTransactions.length === 0 ? (
+            <Text style={styles.emptyStateText}>
+              {t("noTransactionsYetToday")}
+            </Text>
+          ) : (
+            todayTransactions.map((transaction) => (
+              <TransactionCard key={transaction.id} transaction={transaction} />
+            ))
+          )}
+          <View style={{ height: 40 }} />
+        </ScrollView>
+        <BottomNav />
+      </View>
+    );
+  }
+
   // ── Expenses Screen ──────────────────────────────
-  if (screen === 'expenses') {
+  if (screen === "expenses") {
     const todayExpenseTotal = getTodayExpenseTotal();
     const monthlyExpenseTotal = getMonthlyExpenseTotal();
     const monthlyRevenue = getMonthlyRevenueTotal() + totalCollection;
@@ -932,35 +1287,67 @@ export default function HomeScreen() {
     return (
       <View style={styles.screenWrapper}>
         <ScrollView style={styles.container}>
-          <Text style={styles.title}>💰 Expenses</Text>
+          <Text style={styles.title}>{t("expensesTitle")}</Text>
 
-          <View style={[styles.card, { backgroundColor: todayProfit >= 0 ? '#e8f5e9' : '#fdecea' }]}>
-            <Text style={styles.cardTitle}>Today's Profit</Text>
-            <Text style={[styles.dashboardAmount, { color: todayProfit >= 0 ? '#2e7d32' : '#c62828' }]}>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: todayProfit >= 0 ? "#e8f5e9" : "#fdecea" },
+            ]}
+          >
+            <Text style={styles.cardTitle}>{t("todaysProfit")}</Text>
+            <Text
+              style={[
+                styles.dashboardAmount,
+                { color: todayProfit >= 0 ? "#2e7d32" : "#c62828" },
+              ]}
+            >
               ₹{todayProfit}
             </Text>
-            <Text style={styles.dashboardInfo}>Revenue : ₹{totalCollection}</Text>
-            <Text style={styles.dashboardInfo}>Expenses : ₹{todayExpenseTotal}</Text>
+            <Text style={styles.dashboardInfo}>
+              Revenue : ₹{totalCollection}
+            </Text>
+            <Text style={styles.dashboardInfo}>
+              Expenses : ₹{todayExpenseTotal}
+            </Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: monthlyProfit >= 0 ? '#e8f5e9' : '#fdecea' }]}>
-            <Text style={styles.cardTitle}>Monthly Profit</Text>
-            <Text style={[styles.dashboardAmount, { color: monthlyProfit >= 0 ? '#2e7d32' : '#c62828' }]}>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: monthlyProfit >= 0 ? "#e8f5e9" : "#fdecea" },
+            ]}
+          >
+            <Text style={styles.cardTitle}>{t("monthlyProfit")}</Text>
+            <Text
+              style={[
+                styles.dashboardAmount,
+                { color: monthlyProfit >= 0 ? "#2e7d32" : "#c62828" },
+              ]}
+            >
               ₹{monthlyProfit}
             </Text>
-            <Text style={styles.dashboardInfo}>Revenue : ₹{monthlyRevenue}</Text>
-            <Text style={styles.dashboardInfo}>Expenses : ₹{monthlyExpenseTotal}</Text>
+            <Text style={styles.dashboardInfo}>
+              Revenue : ₹{monthlyRevenue}
+            </Text>
+            <Text style={styles.dashboardInfo}>
+              Expenses : ₹{monthlyExpenseTotal}
+            </Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Expense Summary</Text>
-            <Text style={styles.dashboardInfo}>Today : ₹{todayExpenseTotal}</Text>
-            <Text style={styles.dashboardInfo}>This Month : ₹{monthlyExpenseTotal}</Text>
+            <Text style={styles.cardTitle}>{t("expenseSummary")}</Text>
+            <Text style={styles.dashboardInfo}>
+              Today : ₹{todayExpenseTotal}
+            </Text>
+            <Text style={styles.dashboardInfo}>
+              This Month : ₹{monthlyExpenseTotal}
+            </Text>
           </View>
 
           <Text style={styles.sectionHeading}>Add Expense</Text>
 
-          <Text style={styles.label}>Amount (₹)</Text>
+          <Text style={styles.label}>{t("amount")}</Text>
           <TextInput
             style={styles.input}
             value={expenseAmount}
@@ -970,18 +1357,19 @@ export default function HomeScreen() {
             placeholderTextColor="#aaa"
           />
 
-          <Text style={styles.label}>Category</Text>
+          <Text style={styles.label}>{t("category")}</Text>
           <View style={styles.pickerWrapper}>
             <Picker
               selectedValue={expenseCategory}
-              onValueChange={(value) => setExpenseCategory(value)}>
+              onValueChange={(value) => setExpenseCategory(value)}
+            >
               {expenseCategories.map((cat) => (
                 <Picker.Item key={cat} label={cat} value={cat} />
               ))}
             </Picker>
           </View>
 
-          <Text style={styles.label}>Note (optional)</Text>
+          <Text style={styles.label}>{t("noteOptional")}</Text>
           <TextInput
             style={styles.input}
             value={expenseNote}
@@ -991,26 +1379,31 @@ export default function HomeScreen() {
           />
 
           <TouchableOpacity style={styles.saveButton} onPress={saveExpense}>
-            <Text style={styles.buttonText}>➕ Save Expense</Text>
+            <Text style={styles.buttonText}>{t("saveExpense")}</Text>
           </TouchableOpacity>
 
-          <Text style={styles.sectionHeading}>Expense History</Text>
+          <Text style={styles.sectionHeading}>{t("expenseSummary")}</Text>
 
           {expenses.length === 0 ? (
-            <Text style={styles.emptyText}>No expenses recorded yet.</Text>
+            <Text style={styles.emptyText}>{t("expenseRecordNone")}</Text>
           ) : (
             expenses.map((e) => (
               <View key={e.id} style={styles.expenseCard}>
                 <View style={styles.expenseLeft}>
                   <Text style={styles.expenseCategory}>{e.category}</Text>
-                  {e.note ? <Text style={styles.expenseNote}>{e.note}</Text> : null}
-                  <Text style={styles.expenseDate}>{e.date} • {e.time}</Text>
+                  {e.note ? (
+                    <Text style={styles.expenseNote}>{e.note}</Text>
+                  ) : null}
+                  <Text style={styles.expenseDate}>
+                    {e.date} • {e.time}
+                  </Text>
                 </View>
                 <View style={styles.expenseRight}>
                   <Text style={styles.expenseAmount}>₹{e.amount}</Text>
                   <TouchableOpacity
                     style={styles.deleteButton}
-                    onPress={() => deleteExpense(e.id)}>
+                    onPress={() => deleteExpense(e.id)}
+                  >
                     <Text style={styles.deleteText}>🗑</Text>
                   </TouchableOpacity>
                 </View>
@@ -1026,29 +1419,34 @@ export default function HomeScreen() {
   }
 
   // ── Workers Screen ───────────────────────────────
-  if (screen === 'workers') {
+  if (screen === "workers") {
     const settleWorker = (name: string) => {
       const alreadySettled = settlements.find((s) => s.worker === name);
       if (alreadySettled) {
-        Alert.alert('Already Settled', `${name} is already settled today (₹${alreadySettled.amount} at ${alreadySettled.settledAt}).`);
+        Alert.alert(
+          "Already Settled",
+          `${name} is already settled today (₹${alreadySettled.amount} at ${alreadySettled.settledAt}).`,
+        );
         return;
       }
 
       const workerTransactions = transactions.filter((t) => t.worker === name);
       if (workerTransactions.length === 0) {
-        Alert.alert('No Transactions', `${name} has no transactions today.`);
+        Alert.alert("No Transactions", `${name} has no transactions today.`);
         return;
       }
 
-      const breakdown = workerTransactions.map((t) => `${t.service}  ₹${t.amount}`).join('\n');
+      const breakdown = workerTransactions
+        .map((t) => `${t.service}  ₹${t.amount}`)
+        .join("\n");
       const total = workerTransactions.reduce((s, t) => s + t.amount, 0);
-      const share = name === 'Pankaj' ? total : total / 2;
+      const share = name === "Pankaj" ? total : total / 2;
 
       Alert.alert(
         `Settle ${name}`,
         `${breakdown}\n\nTotal: ₹${total}\nShare: ₹${share}`,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: "Cancel", style: "cancel" },
           {
             text: `Pay ₹${share}`,
             onPress: async () => {
@@ -1056,21 +1454,28 @@ export default function HomeScreen() {
               const newSettlement = {
                 worker: name,
                 amount: share,
-                settledAt: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+                settledAt: now.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                }),
               };
               const updated = [...settlements, newSettlement];
               setSettlements(updated);
-              await AsyncStorage.setItem('settlements', JSON.stringify(updated));
-              Alert.alert('Settled', `${name} paid ₹${share} ✅`);
+              await AsyncStorage.setItem(
+                "settlements",
+                JSON.stringify(updated),
+              );
+              Alert.alert("Settled", `${name} paid ₹${share} ✅`);
             },
           },
-        ]
+        ],
       );
     };
 
-    const activeCount = workers.filter(w => w.active).length;
-    const inactiveCount = workers.filter(w => !w.active).length;
-    
+    const activeCount = workers.filter((w) => w.active).length;
+    const inactiveCount = workers.filter((w) => !w.active).length;
+
     const sortedWorkers = [...workers].sort((a, b) => {
       if (a.active === b.active) return a.name.localeCompare(b.name);
       return a.active ? -1 : 1;
@@ -1108,19 +1513,24 @@ export default function HomeScreen() {
           </View>
 
           <Text style={styles.sectionHeading}>Workers List</Text>
-          
+
           {workers.length === 0 ? (
             <View style={styles.emptyStateCard}>
               <Text style={styles.emptyStateText}>No workers found</Text>
-              <Text style={styles.emptyStateSubText}>Add a worker to continue</Text>
+              <Text style={styles.emptyStateSubText}>
+                Add a worker to continue
+              </Text>
             </View>
           ) : (
             sortedWorkers.map((worker, index) => {
-              const isSettled = settlements.some((s) => s.worker === worker.name);
+              const isSettled = settlements.some(
+                (s) => s.worker === worker.name,
+              );
               const isActive = worker.active;
-              
-              const showSeparator = !isActive && index > 0 && sortedWorkers[index - 1].active;
-              
+
+              const showSeparator =
+                !isActive && index > 0 && sortedWorkers[index - 1].active;
+
               return (
                 <React.Fragment key={worker.id}>
                   {showSeparator && (
@@ -1132,34 +1542,52 @@ export default function HomeScreen() {
                     <View style={styles.workerInfo}>
                       <Text style={styles.workerName}>
                         {worker.name}
-                        {!isActive && <Text style={styles.inactiveBadge}> (Inactive)</Text>}
+                        {!isActive && (
+                          <Text style={styles.inactiveBadge}> (Inactive)</Text>
+                        )}
                       </Text>
                       <Text style={styles.workerSubText}>
-                        {isSettled ? '✅ Settled today' : '⏳ Pending settlement'}
+                        {isSettled
+                          ? "✅ Settled today"
+                          : "⏳ Pending settlement"}
                       </Text>
                     </View>
                     <View style={styles.workerActionsRow}>
-                      {isActive && worker.name !== 'Pankaj' && (
+                      {isActive && worker.name !== "Pankaj" && (
                         <TouchableOpacity
-                          style={[styles.settleButton, isSettled && { backgroundColor: '#999' }]}
+                          style={[
+                            styles.settleButton,
+                            isSettled && { backgroundColor: "#999" },
+                          ]}
                           disabled={isSettled}
-                          onPress={() => settleWorker(worker.name)}>
+                          onPress={() => settleWorker(worker.name)}
+                        >
                           <Text style={styles.actionButtonText}>
-                            {isSettled ? 'Paid' : '💰 Settle'}
+                            {isSettled ? "Paid" : "💰 Settle"}
                           </Text>
                         </TouchableOpacity>
                       )}
                       {isActive ? (
                         <TouchableOpacity
                           style={styles.deactivateButton}
-                          onPress={() => deactivateWorker(worker.id, worker.name)}>
-                          <Text style={styles.actionButtonText}>🔴 Deactivate</Text>
+                          onPress={() =>
+                            deactivateWorker(worker.id, worker.name)
+                          }
+                        >
+                          <Text style={styles.actionButtonText}>
+                            🔴 Deactivate
+                          </Text>
                         </TouchableOpacity>
                       ) : (
                         <TouchableOpacity
                           style={styles.reactivateButton}
-                          onPress={() => reactivateWorker(worker.id, worker.name)}>
-                          <Text style={styles.actionButtonText}>🟢 Reactivate</Text>
+                          onPress={() =>
+                            reactivateWorker(worker.id, worker.name)
+                          }
+                        >
+                          <Text style={styles.actionButtonText}>
+                            🟢 Reactivate
+                          </Text>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -1190,7 +1618,7 @@ export default function HomeScreen() {
   }
 
   // ── Analytics Screen ─────────────────────────────
-  if (screen === 'analytics') {
+  if (screen === "analytics") {
     const now = new Date();
 
     const startOfWeek = new Date(now);
@@ -1207,21 +1635,31 @@ export default function HomeScreen() {
 
     const monthReports = reports.filter((r) => {
       const d = r.dateISO ? new Date(r.dateISO) : new Date(r.date);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      return (
+        d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+      );
     });
-    const monthRevenue = monthReports.reduce((s, r) => s + r.totalCollection, 0) + totalCollection;
+    const monthRevenue =
+      monthReports.reduce((s, r) => s + r.totalCollection, 0) + totalCollection;
     const monthCash = monthReports.reduce((s, r) => s + r.cashTotal, 0);
     const monthUPI = monthReports.reduce((s, r) => s + r.upiTotal, 0);
 
-    const weekExpenses = expenses.filter((e) => {
-      const d = e.dateISO ? new Date(e.dateISO) : new Date(e.date);
-      return d >= startOfWeek;
-    }).reduce((s, e) => s + e.amount, 0);
+    const weekExpenses = expenses
+      .filter((e) => {
+        const d = e.dateISO ? new Date(e.dateISO) : new Date(e.date);
+        return d >= startOfWeek;
+      })
+      .reduce((s, e) => s + e.amount, 0);
 
-    const monthExpenses = expenses.filter((e) => {
-      const d = e.dateISO ? new Date(e.dateISO) : new Date(e.date);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).reduce((s, e) => s + e.amount, 0);
+    const monthExpenses = expenses
+      .filter((e) => {
+        const d = e.dateISO ? new Date(e.dateISO) : new Date(e.date);
+        return (
+          d.getMonth() === now.getMonth() &&
+          d.getFullYear() === now.getFullYear()
+        );
+      })
+      .reduce((s, e) => s + e.amount, 0);
 
     const monthProfit = monthRevenue - monthExpenses;
 
@@ -1231,7 +1669,9 @@ export default function HomeScreen() {
         workerTotals[w.worker] = (workerTotals[w.worker] || 0) + w.workDone;
       });
     });
-    const topWorkerName = Object.keys(workerTotals).sort((a, b) => workerTotals[b] - workerTotals[a])[0];
+    const topWorkerName = Object.keys(workerTotals).sort(
+      (a, b) => workerTotals[b] - workerTotals[a],
+    )[0];
     const topWorkerAmount = topWorkerName ? workerTotals[topWorkerName] : 0;
 
     const serviceCounts: { [key: string]: number } = {};
@@ -1245,14 +1685,19 @@ export default function HomeScreen() {
     transactions.forEach((t) => {
       serviceCounts[t.service] = (serviceCounts[t.service] || 0) + 1;
     });
-    const topServiceName = Object.keys(serviceCounts).sort((a, b) => serviceCounts[b] - serviceCounts[a])[0];
+    const topServiceName = Object.keys(serviceCounts).sort(
+      (a, b) => serviceCounts[b] - serviceCounts[a],
+    )[0];
     const topServiceCount = topServiceName ? serviceCounts[topServiceName] : 0;
 
-    const avgDaily = reports.length > 0
-      ? Math.round(reports.reduce((s, r) => s + r.totalCollection, 0) / reports.length)
-      : 0;
+    const avgDaily =
+      reports.length > 0
+        ? Math.round(
+            reports.reduce((s, r) => s + r.totalCollection, 0) / reports.length,
+          )
+        : 0;
 
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const last7: { label: string; amount: number }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
@@ -1261,7 +1706,10 @@ export default function HomeScreen() {
       const nextDay = new Date(d);
       nextDay.setDate(d.getDate() + 1);
       const dayTotal = reports
-        .filter((r) => { const rd = r.dateISO ? new Date(r.dateISO) : new Date(r.date); return rd >= d && rd < nextDay; })
+        .filter((r) => {
+          const rd = r.dateISO ? new Date(r.dateISO) : new Date(r.date);
+          return rd >= d && rd < nextDay;
+        })
         .reduce((s, r) => s + r.totalCollection, 0);
       last7.push({ label: dayNames[d.getDay()], amount: dayTotal });
     }
@@ -1277,16 +1725,33 @@ export default function HomeScreen() {
             <Text style={styles.dashboardAmount}>₹{weekRevenue}</Text>
             <Text style={styles.dashboardInfo}>Cash : ₹{weekCash}</Text>
             <Text style={styles.dashboardInfo}>UPI : ₹{weekUPI}</Text>
-            <Text style={[styles.dashboardInfo, { color: '#d9534f' }]}>Expenses : ₹{weekExpenses}</Text>
+            <Text style={[styles.dashboardInfo, { color: "#d9534f" }]}>
+              Expenses : ₹{weekExpenses}
+            </Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: monthProfit >= 0 ? '#e8f5e9' : '#fdecea' }]}>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: monthProfit >= 0 ? "#e8f5e9" : "#fdecea" },
+            ]}
+          >
             <Text style={styles.cardTitle}>This Month</Text>
             <Text style={styles.dashboardAmount}>₹{monthRevenue}</Text>
             <Text style={styles.dashboardInfo}>Cash : ₹{monthCash}</Text>
             <Text style={styles.dashboardInfo}>UPI : ₹{monthUPI}</Text>
-            <Text style={[styles.dashboardInfo, { color: '#d9534f' }]}>Expenses : ₹{monthExpenses}</Text>
-            <Text style={[styles.dashboardInfo, { color: monthProfit >= 0 ? '#2e7d32' : '#c62828', fontWeight: '700' }]}>
+            <Text style={[styles.dashboardInfo, { color: "#d9534f" }]}>
+              Expenses : ₹{monthExpenses}
+            </Text>
+            <Text
+              style={[
+                styles.dashboardInfo,
+                {
+                  color: monthProfit >= 0 ? "#2e7d32" : "#c62828",
+                  fontWeight: "700",
+                },
+              ]}
+            >
               Profit : ₹{monthProfit}
             </Text>
           </View>
@@ -1294,7 +1759,9 @@ export default function HomeScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>📅 Avg Per Day</Text>
             <Text style={styles.dashboardAmount}>₹{avgDaily}</Text>
-            <Text style={styles.dashboardInfo}>Over {reports.length} closed days</Text>
+            <Text style={styles.dashboardInfo}>
+              Over {reports.length} closed days
+            </Text>
           </View>
 
           <View style={styles.card}>
@@ -1302,7 +1769,9 @@ export default function HomeScreen() {
             {topWorkerName ? (
               <>
                 <Text style={styles.dashboardAmount}>{topWorkerName}</Text>
-                <Text style={styles.dashboardInfo}>₹{topWorkerAmount} earned</Text>
+                <Text style={styles.dashboardInfo}>
+                  ₹{topWorkerAmount} earned
+                </Text>
               </>
             ) : (
               <Text style={styles.emptyText}>No data yet</Text>
@@ -1314,7 +1783,9 @@ export default function HomeScreen() {
             {topServiceName ? (
               <>
                 <Text style={styles.dashboardAmount}>{topServiceName}</Text>
-                <Text style={styles.dashboardInfo}>{topServiceCount} times</Text>
+                <Text style={styles.dashboardInfo}>
+                  {topServiceCount} times
+                </Text>
               </>
             ) : (
               <Text style={styles.emptyText}>No data yet</Text>
@@ -1327,9 +1798,18 @@ export default function HomeScreen() {
               <View key={i} style={styles.trendRow}>
                 <Text style={styles.trendLabel}>{day.label}</Text>
                 <View style={styles.trendBarBg}>
-                  <View style={[styles.trendBarFill, { width: `${Math.round((day.amount / maxTrend) * 100)}%` }]} />
+                  <View
+                    style={[
+                      styles.trendBarFill,
+                      {
+                        width: `${Math.round((day.amount / maxTrend) * 100)}%`,
+                      },
+                    ]}
+                  />
                 </View>
-                <Text style={styles.trendAmount}>{day.amount > 0 ? `₹${day.amount}` : '-'}</Text>
+                <Text style={styles.trendAmount}>
+                  {day.amount > 0 ? `₹${day.amount}` : "-"}
+                </Text>
               </View>
             ))}
           </View>
@@ -1340,44 +1820,82 @@ export default function HomeScreen() {
   }
 
   // ── Reports Screen ───────────────────────────────
-  if (screen === 'reports') {
+  if (screen === "reports") {
     if (selectedReport) {
       return (
         <View style={styles.screenWrapper}>
           <ScrollView style={styles.container}>
-            <TouchableOpacity style={styles.backButton} onPress={() => setSelectedReport(null)}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => setSelectedReport(null)}
+            >
               <Text style={styles.buttonText}>← Back to Reports</Text>
             </TouchableOpacity>
 
             <Text style={styles.title}>
-              📋 {selectedReport.date}{selectedReport.closedAt ? `\n${selectedReport.closedAt}` : ''}
+              📋 {selectedReport.date}
+              {selectedReport.closedAt ? `\n${selectedReport.closedAt}` : ""}
             </Text>
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Revenue</Text>
-              <Text style={styles.dashboardAmount}>₹{selectedReport.totalCollection}</Text>
-              <Text style={styles.dashboardInfo}>Cash : ₹{selectedReport.cashTotal}</Text>
-              <Text style={styles.dashboardInfo}>UPI : ₹{selectedReport.upiTotal}</Text>
+              <Text style={styles.dashboardAmount}>
+                ₹{selectedReport.totalCollection}
+              </Text>
+              <Text style={styles.dashboardInfo}>
+                Cash : ₹{selectedReport.cashTotal}
+              </Text>
+              <Text style={styles.dashboardInfo}>
+                UPI : ₹{selectedReport.upiTotal}
+              </Text>
             </View>
 
             {selectedReport.totalExpenses !== undefined && (
-              <View style={[styles.card, { backgroundColor: (selectedReport.profit ?? 0) >= 0 ? '#e8f5e9' : '#fdecea' }]}>
+              <View
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor:
+                      (selectedReport.profit ?? 0) >= 0 ? "#e8f5e9" : "#fdecea",
+                  },
+                ]}
+              >
                 <Text style={styles.cardTitle}>Expenses & Profit</Text>
-                <Text style={[styles.dashboardInfo, { color: '#d9534f' }]}>Expenses : ₹{selectedReport.totalExpenses}</Text>
-                <Text style={[styles.dashboardAmount, { color: (selectedReport.profit ?? 0) >= 0 ? '#2e7d32' : '#c62828' }]}>
+                <Text style={[styles.dashboardInfo, { color: "#d9534f" }]}>
+                  Expenses : ₹{selectedReport.totalExpenses}
+                </Text>
+                <Text
+                  style={[
+                    styles.dashboardAmount,
+                    {
+                      color:
+                        (selectedReport.profit ?? 0) >= 0
+                          ? "#2e7d32"
+                          : "#c62828",
+                    },
+                  ]}
+                >
                   Profit : ₹{selectedReport.profit}
                 </Text>
-                {selectedReport.expenses && selectedReport.expenses.length > 0 && (
-                  <>
-                    <Text style={[styles.workerSubText, { marginTop: 10 }]}>Expense Breakdown:</Text>
-                    {selectedReport.expenses.map((e: any, i: number) => (
-                      <View key={i} style={styles.reportExpenseRow}>
-                        <Text style={styles.reportExpenseCategory}>{e.category}{e.note ? ` — ${e.note}` : ''}</Text>
-                        <Text style={styles.reportExpenseAmount}>₹{e.amount}</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
+                {selectedReport.expenses &&
+                  selectedReport.expenses.length > 0 && (
+                    <>
+                      <Text style={[styles.workerSubText, { marginTop: 10 }]}>
+                        Expense Breakdown:
+                      </Text>
+                      {selectedReport.expenses.map((e: any, i: number) => (
+                        <View key={i} style={styles.reportExpenseRow}>
+                          <Text style={styles.reportExpenseCategory}>
+                            {e.category}
+                            {e.note ? ` — ${e.note}` : ""}
+                          </Text>
+                          <Text style={styles.reportExpenseAmount}>
+                            ₹{e.amount}
+                          </Text>
+                        </View>
+                      ))}
+                    </>
+                  )}
               </View>
             )}
 
@@ -1386,24 +1904,35 @@ export default function HomeScreen() {
               <View key={item.worker} style={styles.workerCard}>
                 <Text style={styles.workerName}>{item.worker}</Text>
                 <View>
-                  <Text style={styles.workerAmount}>Work: ₹{item.workDone}</Text>
+                  <Text style={styles.workerAmount}>
+                    Work: ₹{item.workDone}
+                  </Text>
                   <Text style={styles.workerSubText}>Share: ₹{item.share}</Text>
                 </View>
               </View>
             ))}
 
             {/* Service Breakdown */}
-            {selectedReport.serviceReport && selectedReport.serviceReport.length > 0 && (
-              <>
-                <Text style={styles.sectionHeading}>✂️ Service Breakdown</Text>
-                {selectedReport.serviceReport.map((item: any, idx: number) => (
-                  <View key={idx} style={styles.serviceBreakdownCard}>
-                    <Text style={styles.serviceBreakdownName}>{item.service}</Text>
-                    <Text style={styles.serviceBreakdownCount}>{item.count} times</Text>
-                  </View>
-                ))}
-              </>
-            )}
+            {selectedReport.serviceReport &&
+              selectedReport.serviceReport.length > 0 && (
+                <>
+                  <Text style={styles.sectionHeading}>
+                    ✂️ Service Breakdown
+                  </Text>
+                  {selectedReport.serviceReport.map(
+                    (item: any, idx: number) => (
+                      <View key={idx} style={styles.serviceBreakdownCard}>
+                        <Text style={styles.serviceBreakdownName}>
+                          {item.service}
+                        </Text>
+                        <Text style={styles.serviceBreakdownCount}>
+                          {item.count} times
+                        </Text>
+                      </View>
+                    ),
+                  )}
+                </>
+              )}
           </ScrollView>
           <BottomNav />
         </View>
@@ -1419,25 +1948,30 @@ export default function HomeScreen() {
             <Text style={styles.cardTitle}>Total Closed Days</Text>
             <Text style={styles.dashboardAmount}>{reports.length}</Text>
             <Text style={styles.dashboardInfo}>
-              Total Revenue : ₹{reports.reduce((sum, r) => sum + r.totalCollection, 0)}
+              Total Revenue : ₹
+              {reports.reduce((sum, r) => sum + r.totalCollection, 0)}
             </Text>
-            <Text style={[styles.dashboardInfo, { color: '#d9534f' }]}>
-              Total Expenses : ₹{reports.reduce((sum, r) => sum + (r.totalExpenses || 0), 0)}
+            <Text style={[styles.dashboardInfo, { color: "#d9534f" }]}>
+              Total Expenses : ₹
+              {reports.reduce((sum, r) => sum + (r.totalExpenses || 0), 0)}
             </Text>
           </View>
 
           {reports.length === 0 ? (
-            <Text style={styles.emptyText}>No reports yet. Close a day to generate one.</Text>
+            <Text style={styles.emptyText}>
+              No reports yet. Close a day to generate one.
+            </Text>
           ) : (
             reports.map((report, index) => (
               <TouchableOpacity
                 key={index}
                 style={styles.reportCard}
-                onPress={() => setSelectedReport(report)}>
+                onPress={() => setSelectedReport(report)}
+              >
                 <View>
                   <Text style={styles.reportDate}>{report.date}</Text>
                   <Text style={styles.workerSubText}>
-                    {report.closedAt ? `Closed at ${report.closedAt}` : ''}
+                    {report.closedAt ? `Closed at ${report.closedAt}` : ""}
                   </Text>
                   <Text style={styles.workerSubText}>
                     Cash ₹{report.cashTotal} • UPI ₹{report.upiTotal}
@@ -1449,27 +1983,35 @@ export default function HomeScreen() {
                   )}
                 </View>
                 <View style={styles.reportRight}>
-                  <Text style={styles.reportAmount}>₹{report.totalCollection}</Text>
+                  <Text style={styles.reportAmount}>
+                    ₹{report.totalCollection}
+                  </Text>
                   <TouchableOpacity
                     style={styles.deleteButton}
                     onPress={() => {
                       Alert.alert(
-                        'Delete Report',
+                        "Delete Report",
                         `Delete report for ${report.date}?`,
                         [
-                          { text: 'Cancel', style: 'cancel' },
+                          { text: "Cancel", style: "cancel" },
                           {
-                            text: 'Delete',
-                            style: 'destructive',
+                            text: "Delete",
+                            style: "destructive",
                             onPress: async () => {
-                              const updated = reports.filter((_, i) => i !== index);
+                              const updated = reports.filter(
+                                (_, i) => i !== index,
+                              );
                               setReports(updated);
-                              await AsyncStorage.setItem('reports', JSON.stringify(updated));
+                              await AsyncStorage.setItem(
+                                "reports",
+                                JSON.stringify(updated),
+                              );
                             },
                           },
-                        ]
+                        ],
                       );
-                    }}>
+                    }}
+                  >
                     <Text style={styles.deleteText}>🗑</Text>
                   </TouchableOpacity>
                 </View>
@@ -1488,56 +2030,48 @@ export default function HomeScreen() {
       <ScrollView style={styles.container}>
         <Text style={styles.title}>💈 Pankaj Hair Salon</Text>
 
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Today's Collection</Text>
-            <TouchableOpacity onPress={() => setShowCollection(!showCollection)}>
-              <Text style={styles.eyeIcon}>{showCollection ? '🙈' : '👁'}</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.dashboardAmount}>
-            {showCollection ? `₹${totalCollection}` : '*****'}
-          </Text>
-          <View style={styles.collectionRow}>
-            <View style={styles.collectionPill}>
-              <Text style={styles.collectionPillLabel}>💵 Cash</Text>
-              <Text style={styles.collectionPillAmount}>
-                {showCollection ? `₹${cashTotal}` : '***'}
-              </Text>
-            </View>
-            <View style={styles.collectionPill}>
-              <Text style={styles.collectionPillLabel}>📲 UPI</Text>
-              <Text style={styles.collectionPillAmount}>
-                {showCollection ? `₹${upiTotal}` : '***'}
-              </Text>
-            </View>
-          </View>
-        </View>
+        <SummaryCard
+          totalCollection={totalCollection}
+          cashTotal={cashTotal}
+          upiTotal={upiTotal}
+          showCollection={showCollection}
+          toggleCollectionVisibility={() => setShowCollection((prev) => !prev)}
+        />
 
         <TouchableOpacity
-          style={[styles.addTransactionButton, (dayClosed || activeWorkers.length === 0 || services.length === 0) && { backgroundColor: '#999' }]}
-          disabled={dayClosed || activeWorkers.length === 0 || services.length === 0}
-          onPress={() => setScreen('transaction')}>
+          style={[
+            styles.addTransactionButton,
+            (dayClosed ||
+              activeWorkerObjects.length === 0 ||
+              services.length === 0) && { backgroundColor: "#999" },
+          ]}
+          disabled={
+            dayClosed ||
+            activeWorkerObjects.length === 0 ||
+            services.length === 0
+          }
+          onPress={() => setScreen("transaction")}
+        >
           <Text style={styles.addTransactionText}>
-            {services.length === 0 ? '⚠️ No Services Available' : 
-             activeWorkers.length === 0 ? '⚠️ No Workers Available' : 
-             '➕ Add Transaction'}
+            {services.length === 0
+              ? "⚠️ No Services Available"
+              : activeWorkerObjects.length === 0
+                ? "⚠️ No Workers Available"
+                : "➕ Add Transaction"}
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.sectionHeading}>Worker Earnings</Text>
-        {workers.filter(w => w.active).map((worker) => {
-          const isSettled = settlements.some((s) => s.worker === worker.name);
-          return (
-            <View key={worker.id} style={styles.workerCard}>
-              <Text style={styles.workerName}>
-                {worker.name}
-                {isSettled ? '  ✅' : ''}
-              </Text>
-              <Text style={styles.workerAmount}>₹{getWorkerTotal(worker.name)}</Text>
-            </View>
-          );
-        })}
+        <WorkerEarningsSection
+          activeWorkers={activeWorkerObjects}
+          getWorkerTotal={getWorkerTotal}
+          settlements={settlements}
+        />
+
+        <RecentTransactionsSection
+          transactions={visibleTransactions}
+          onViewAll={navigateToTransactionHistory}
+          showViewAll={showViewAllTransactions}
+        />
 
         <View style={styles.actionRow}>
           {!dayClosed ? (
@@ -1545,7 +2079,10 @@ export default function HomeScreen() {
               <Text style={styles.buttonText}>🔒 Close Day</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.startDayButton} onPress={startNewDay}>
+            <TouchableOpacity
+              style={styles.startDayButton}
+              onPress={startNewDay}
+            >
               <Text style={styles.buttonText}>🌅 Start New Day</Text>
             </TouchableOpacity>
           )}
@@ -1559,7 +2096,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   screenWrapper: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: "#f5f5f5",
   },
   container: {
     flex: 1,
@@ -1568,227 +2105,227 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   // ── Bottom Nav ───────────────────────────────────
   bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
+    flexDirection: "row",
+    backgroundColor: "#fff",
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: "#e0e0e0",
     paddingBottom: 20,
     paddingTop: 10,
   },
   navTab: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 6,
   },
   navTabActive: {
     borderTopWidth: 2,
-    borderTopColor: '#000',
+    borderTopColor: "#000",
   },
   navTabText: {
     fontSize: 10,
-    color: '#999',
-    fontWeight: '500',
-    textAlign: 'center',
+    color: "#999",
+    fontWeight: "500",
+    textAlign: "center",
   },
   navTabTextActive: {
-    color: '#000',
-    fontWeight: '700',
+    color: "#000",
+    fontWeight: "700",
   },
 
   // ── Typography ───────────────────────────────────
   title: {
     fontSize: 26,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 20,
   },
   sectionHeading: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginTop: 24,
     marginBottom: 12,
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 10,
     marginBottom: 5,
   },
   emptyText: {
-    textAlign: 'center',
-    color: '#999',
+    textAlign: "center",
+    color: "#999",
     fontSize: 15,
     marginTop: 40,
   },
 
   // ── Cards ────────────────────────────────────────
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 20,
     borderRadius: 16,
     marginBottom: 16,
   },
   cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   eyeIcon: {
     fontSize: 22,
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   dashboardAmount: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginTop: 8,
-    color: '#111',
+    color: "#111",
   },
   dashboardInfo: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 8,
-    color: '#444',
+    color: "#444",
   },
 
   // ── Collection Pills ─────────────────────────────
   collectionRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
     marginTop: 14,
   },
   collectionPill: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: "#f0f0f0",
     borderRadius: 12,
     padding: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
   collectionPillLabel: {
     fontSize: 13,
-    color: '#666',
-    fontWeight: '600',
+    color: "#666",
+    fontWeight: "600",
   },
   collectionPillAmount: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111',
+    fontWeight: "bold",
+    color: "#111",
     marginTop: 4,
   },
 
   // ── Buttons ──────────────────────────────────────
   addTransactionButton: {
-    backgroundColor: '#000',
+    backgroundColor: "#000",
     padding: 22,
     borderRadius: 16,
     marginBottom: 24,
-    alignItems: 'center',
+    alignItems: "center",
   },
   addTransactionText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   saveButton: {
-    backgroundColor: '#28a745',
+    backgroundColor: "#28a745",
     padding: 16,
     borderRadius: 10,
     marginTop: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   backButton: {
-    backgroundColor: '#555',
+    backgroundColor: "#555",
     padding: 14,
     borderRadius: 10,
     marginTop: 10,
     marginBottom: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   buttonText: {
-    color: '#fff',
-    textAlign: 'center',
+    color: "#fff",
+    textAlign: "center",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   actionRow: {
     marginTop: 24,
     marginBottom: 40,
   },
   closeDayButton: {
-    backgroundColor: '#d9534f',
+    backgroundColor: "#d9534f",
     padding: 16,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
   startDayButton: {
-    backgroundColor: '#28a745',
+    backgroundColor: "#28a745",
     padding: 16,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
 
   // ── Service Management Styles ───────────────────
   addServiceButton: {
-    backgroundColor: '#6f42c1',
+    backgroundColor: "#6f42c1",
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   addServiceButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   serviceCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 16,
     borderRadius: 12,
     marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   serviceInfo: {
     flex: 1,
   },
   serviceName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
   },
   servicePrice: {
     fontSize: 14,
-    color: '#28a745',
-    fontWeight: '600',
+    color: "#28a745",
+    fontWeight: "600",
     marginTop: 4,
   },
   serviceActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
   },
   editServiceButton: {
-    backgroundColor: '#17a2b8',
+    backgroundColor: "#17a2b8",
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
   },
   deleteServiceButton: {
-    backgroundColor: '#d9534f',
+    backgroundColor: "#d9534f",
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
   },
   infoNote: {
-    backgroundColor: '#e7f3ff',
+    backgroundColor: "#e7f3ff",
     padding: 12,
     borderRadius: 8,
     marginTop: 20,
@@ -1796,51 +2333,51 @@ const styles = StyleSheet.create({
   },
   infoNoteText: {
     fontSize: 13,
-    color: '#0066cc',
-    textAlign: 'center',
+    color: "#0066cc",
+    textAlign: "center",
   },
   serviceBreakdownCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   serviceBreakdownName: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
   },
   serviceBreakdownCount: {
     fontSize: 15,
-    fontWeight: 'bold',
-    color: '#6f42c1',
+    fontWeight: "bold",
+    color: "#6f42c1",
   },
 
   // ── Modal Styles ────────────────────────────────
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 20,
     padding: 20,
-    width: '90%',
+    width: "90%",
     maxWidth: 400,
   },
   modalTitle: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: "center",
   },
   modalButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
     marginTop: 20,
   },
@@ -1848,78 +2385,78 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: "center",
   },
   cancelButton: {
-    backgroundColor: '#6c757d',
+    backgroundColor: "#6c757d",
   },
 
   // ── Worker Cards ─────────────────────────────────
   workerCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   workerName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   inactiveBadge: {
-    color: '#999',
-    fontStyle: 'italic',
+    color: "#999",
+    fontStyle: "italic",
   },
   workerSubText: {
     fontSize: 12,
-    color: '#888',
+    color: "#888",
     marginTop: 3,
   },
   workerAmount: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#28a745',
+    fontWeight: "bold",
+    color: "#28a745",
   },
-  
+
   // ── Worker Management Styles ───────────────────
   statsCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 20,
     borderRadius: 16,
     marginBottom: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
   },
   statBox: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
   },
   statNumber: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   statLabel: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginTop: 4,
   },
   statDivider: {
     width: 1,
     height: 40,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: "#e0e0e0",
   },
   addWorkerCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 20,
     borderRadius: 16,
     marginBottom: 20,
   },
   workerManagementCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
@@ -1928,36 +2465,36 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   workerActionsRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     marginTop: 8,
   },
   settleButton: {
-    backgroundColor: '#e67e22',
+    backgroundColor: "#e67e22",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
     flex: 1,
   },
   deactivateButton: {
-    backgroundColor: '#d9534f',
+    backgroundColor: "#d9534f",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
     flex: 1,
   },
   reactivateButton: {
-    backgroundColor: '#28a745',
+    backgroundColor: "#28a745",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
     flex: 1,
   },
   actionButtonText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: "#fff",
+    fontWeight: "600",
     fontSize: 13,
-    textAlign: 'center',
+    textAlign: "center",
   },
   separator: {
     marginTop: 16,
@@ -1966,46 +2503,108 @@ const styles = StyleSheet.create({
   },
   separatorText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#999',
+    fontWeight: "600",
+    color: "#999",
     letterSpacing: 0.5,
   },
   emptyStateCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 40,
     borderRadius: 16,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
   },
   emptyStateText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#999',
+    fontWeight: "bold",
+    color: "#999",
     marginBottom: 8,
   },
   emptyStateSubText: {
     fontSize: 14,
-    color: '#bbb',
+    color: "#bbb",
+  },
+  viewAllButton: {
+    marginTop: 10,
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  viewAllText: {
+    color: "#000",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  latestTransactionBlock: {
+    marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+  sectionSubText: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 8,
+  },
+  latestTransactionRow: {
+    gap: 6,
+  },
+  latestTransactionText: {
+    fontSize: 15,
+    color: "#555",
+  },
+  transactionCard: {
+    backgroundColor: "#fff",
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#eee",
+  },
+  transactionTime: {
+    fontSize: 13,
+    color: "#888",
+    marginBottom: 6,
+  },
+  transactionService: {
+    fontSize: 15,
+    color: "#333",
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  transactionMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  transactionAmount: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#28a745",
+  },
+  transactionMode: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "600",
   },
   settlementCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
 
   // ── Expense Cards ────────────────────────────────
   expenseCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   expenseLeft: {
     flex: 1,
@@ -2013,72 +2612,72 @@ const styles = StyleSheet.create({
   },
   expenseCategory: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#333',
+    fontWeight: "700",
+    color: "#333",
   },
   expenseNote: {
     fontSize: 13,
-    color: '#666',
+    color: "#666",
     marginTop: 2,
   },
   expenseDate: {
     fontSize: 11,
-    color: '#aaa',
+    color: "#aaa",
     marginTop: 3,
   },
   expenseRight: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   expenseAmount: {
     fontSize: 17,
-    fontWeight: 'bold',
-    color: '#d9534f',
+    fontWeight: "bold",
+    color: "#d9534f",
   },
   pickerWrapper: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     marginBottom: 4,
   },
 
   // ── Reports ──────────────────────────────────────
   reportCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   reportRight: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   reportDate: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   reportAmount: {
     fontSize: 17,
-    fontWeight: 'bold',
-    color: '#28a745',
+    fontWeight: "bold",
+    color: "#28a745",
   },
   reportExpenseRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: 6,
     paddingHorizontal: 4,
   },
   reportExpenseCategory: {
     fontSize: 13,
-    color: '#555',
+    color: "#555",
     flex: 1,
   },
   reportExpenseAmount: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#d9534f',
+    fontWeight: "600",
+    color: "#d9534f",
   },
   deleteButton: {
     marginTop: 6,
@@ -2091,44 +2690,44 @@ const styles = StyleSheet.create({
   // ── Input ────────────────────────────────────────
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     borderRadius: 8,
     padding: 10,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     fontSize: 16,
     marginBottom: 12,
   },
 
   // ── Trend Chart ──────────────────────────────────
   trendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 10,
   },
   trendLabel: {
     width: 36,
     fontSize: 13,
-    fontWeight: '600',
-    color: '#444',
+    fontWeight: "600",
+    color: "#444",
   },
   trendBarBg: {
     flex: 1,
     height: 14,
-    backgroundColor: '#eee',
+    backgroundColor: "#eee",
     borderRadius: 7,
     marginHorizontal: 8,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   trendBarFill: {
     height: 14,
-    backgroundColor: '#6f42c1',
+    backgroundColor: "#6f42c1",
     borderRadius: 7,
   },
   trendAmount: {
     width: 64,
     fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
-    textAlign: 'right',
+    fontWeight: "600",
+    color: "#333",
+    textAlign: "right",
   },
 });
