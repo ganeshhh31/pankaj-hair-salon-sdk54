@@ -13,7 +13,6 @@ const en = {
   aboutProjectDescription:
     "This salon dashboard helps you manage transactions, workers, services, expenses and reports from a single app.",
   developerInfo: "Developer Information",
-  developerName: "Developed by Pankaj",
   developerContact: "hello@pankajhairsalon.app",
 
   homeTab: "Home",

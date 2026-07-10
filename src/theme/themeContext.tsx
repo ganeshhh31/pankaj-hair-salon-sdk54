@@ -1,3 +1,4 @@
+import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -20,6 +21,8 @@ const THEME_STORAGE_KEY = "appTheme";
 interface AppThemeContextValue {
   themeName: AppTheme;
   resolvedTheme: "light" | "dark";
+  colors: (typeof Colors)["light"];
+  isDark: boolean;
   setTheme: (theme: AppTheme) => Promise<void>;
 }
 
@@ -67,7 +70,13 @@ export const AppThemeProvider = ({
     themeName === "system" ? (systemScheme ?? "light") : themeName;
 
   const value = useMemo(
-    () => ({ themeName, resolvedTheme, setTheme }),
+    () => ({
+      themeName,
+      resolvedTheme,
+      colors: Colors[resolvedTheme],
+      isDark: resolvedTheme === "dark",
+      setTheme,
+    }),
     [themeName, resolvedTheme, setTheme],
   );
 

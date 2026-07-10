@@ -1,4 +1,5 @@
 import { useLocalization } from "@/src/localization/languageContext";
+import { useAppTheme } from "@/src/theme/themeContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
 import React, { useEffect, useMemo, useState } from "react";
@@ -41,6 +42,7 @@ const ServiceModalComponent = ({
   editingService: Service | null;
 }) => {
   const { t } = useLocalization();
+  const { colors } = useAppTheme();
   const [serviceFormName, setServiceFormName] = useState("");
   const [serviceFormPrice, setServiceFormPrice] = useState("");
 
@@ -80,29 +82,56 @@ const ServiceModalComponent = ({
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>
+        <View
+          style={[
+            styles.modalContent,
+            {
+              backgroundColor: colors.background,
+              borderColor: colors.border,
+              borderWidth: 1,
+            },
+          ]}
+        >
+          <Text style={[styles.modalTitle, { color: colors.text }]}>
             {editingService ? t("editService") : t("addNewService")}
           </Text>
 
-          <Text style={styles.label}>{t("serviceName")}</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            {t("serviceName")}
+          </Text>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                color: colors.text,
+              },
+            ]}
             placeholder={t("placeholderServiceName")}
             value={serviceFormName}
             onChangeText={setServiceFormName}
-            placeholderTextColor="#aaa"
+            placeholderTextColor={colors.icon}
             autoFocus={true}
           />
 
-          <Text style={styles.label}>{t("price")}</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            {t("price")}
+          </Text>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                color: colors.text,
+              },
+            ]}
             placeholder={t("placeholderPrice")}
             value={serviceFormPrice}
             onChangeText={setServiceFormPrice}
             keyboardType="numeric"
-            placeholderTextColor="#aaa"
+            placeholderTextColor={colors.icon}
           />
 
           <View style={styles.modalButtons}>
@@ -171,10 +200,22 @@ const SummaryCard = React.memo(
     toggleCollectionVisibility: () => void;
   }) => {
     const { t } = useLocalization();
+    const { colors } = useAppTheme();
     return (
-      <View style={styles.card}>
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderWidth: 1,
+          },
+        ]}
+      >
         <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{t("todaysCollection")}</Text>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>
+            {t("todaysCollection")}
+          </Text>
           <TouchableOpacity onPress={toggleCollectionVisibility}>
             <Text style={styles.eyeIcon}>{showCollection ? "🙈" : "👁"}</Text>
           </TouchableOpacity>
@@ -183,15 +224,29 @@ const SummaryCard = React.memo(
           {showCollection ? `₹${totalCollection}` : "*****"}
         </Text>
         <View style={styles.collectionRow}>
-          <View style={styles.collectionPill}>
-            <Text style={styles.collectionPillLabel}>{t("cash")}</Text>
-            <Text style={styles.collectionPillAmount}>
+          <View
+            style={[
+              styles.collectionPill,
+              { backgroundColor: colors.background },
+            ]}
+          >
+            <Text style={[styles.collectionPillLabel, { color: colors.icon }]}>
+              {t("cash")}
+            </Text>
+            <Text style={[styles.collectionPillAmount, { color: colors.text }]}>
               {showCollection ? `₹${cashTotal}` : "***"}
             </Text>
           </View>
-          <View style={styles.collectionPill}>
-            <Text style={styles.collectionPillLabel}>{t("upi")}</Text>
-            <Text style={styles.collectionPillAmount}>
+          <View
+            style={[
+              styles.collectionPill,
+              { backgroundColor: colors.background },
+            ]}
+          >
+            <Text style={[styles.collectionPillLabel, { color: colors.icon }]}>
+              {t("upi")}
+            </Text>
+            <Text style={[styles.collectionPillAmount, { color: colors.text }]}>
               {showCollection ? `₹${upiTotal}` : "***"}
             </Text>
           </View>
@@ -212,16 +267,31 @@ const WorkerEarningsSection = React.memo(
     settlements: any[];
   }) => {
     const { t } = useLocalization();
+    const { colors } = useAppTheme();
     return (
       <View>
-        <Text style={styles.sectionHeading}>{t("workerEarnings")}</Text>
+        <Text style={[styles.sectionHeading, { color: colors.text }]}>
+          {t("workerEarnings")}
+        </Text>
         {activeWorkers.length === 0 ? (
-          <Text style={styles.emptyText}>{t("noActiveWorkersYet")}</Text>
+          <Text style={[styles.emptyText, { color: colors.icon }]}>
+            {t("noActiveWorkersYet")}
+          </Text>
         ) : (
           activeWorkers.map((worker) => {
             const isSettled = settlements.some((s) => s.worker === worker.name);
             return (
-              <View key={worker.id} style={styles.workerCard}>
+              <View
+                key={worker.id}
+                style={[
+                  styles.workerCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
                 <View>
                   <Text style={styles.workerName}>
                     {worker.name}
@@ -243,17 +313,39 @@ const WorkerEarningsSection = React.memo(
 );
 
 const TransactionCard = React.memo(
-  ({ transaction }: { transaction: Transaction }) => (
-    <View style={styles.transactionCard}>
-      <Text style={styles.transactionTime}>{transaction.time}</Text>
-      <Text style={styles.workerName}>{transaction.worker}</Text>
-      <Text style={styles.transactionService}>{transaction.service}</Text>
-      <View style={styles.transactionMetaRow}>
-        <Text style={styles.transactionAmount}>₹{transaction.amount}</Text>
-        <Text style={styles.transactionMode}>{transaction.paymentMode}</Text>
+  ({ transaction }: { transaction: Transaction }) => {
+    const { colors } = useAppTheme();
+    return (
+      <View
+        style={[
+          styles.transactionCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderWidth: 1,
+          },
+        ]}
+      >
+        <Text style={[styles.transactionTime, { color: colors.icon }]}>
+          {transaction.time}
+        </Text>
+        <Text style={[styles.workerName, { color: colors.text }]}>
+          {transaction.worker}
+        </Text>
+        <Text style={[styles.transactionService, { color: colors.text }]}>
+          {transaction.service}
+        </Text>
+        <View style={styles.transactionMetaRow}>
+          <Text style={[styles.transactionAmount, { color: colors.tint }]}>
+            ₹{transaction.amount}
+          </Text>
+          <Text style={[styles.transactionMode, { color: colors.icon }]}>
+            {transaction.paymentMode}
+          </Text>
+        </View>
       </View>
-    </View>
-  ),
+    );
+  },
 );
 
 const RecentTransactionsSection = React.memo(
@@ -267,9 +359,12 @@ const RecentTransactionsSection = React.memo(
     showViewAll: boolean;
   }) => {
     const { t } = useLocalization();
+    const { colors } = useAppTheme();
     return (
       <View>
-        <Text style={styles.sectionHeading}>{t("recentTransactions")}</Text>
+        <Text style={[styles.sectionHeading, { color: colors.text }]}>
+          {t("recentTransactions")}
+        </Text>
         {transactions.length === 0 ? (
           <Text style={styles.emptyStateText}>
             {t("noTransactionsYetToday")}
@@ -284,7 +379,7 @@ const RecentTransactionsSection = React.memo(
                 style={styles.viewAllButton}
                 onPress={onViewAll}
               >
-                <Text style={styles.viewAllText}>
+                <Text style={[styles.viewAllText, { color: colors.text }]}>
                   {t("viewAllTransactions")}
                 </Text>
               </TouchableOpacity>
@@ -307,6 +402,7 @@ export default function HomeScreen() {
   const [editingService, setEditingService] = useState<Service | null>(null);
 
   const { t } = useLocalization();
+  const { colors } = useAppTheme();
 
   const expenseCategoryKeys = [
     "expenseCategoryRent",
@@ -1015,15 +1111,25 @@ export default function HomeScreen() {
 
   if (!isLoaded) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text>Loading...</Text>
+      <View
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <Text style={{ color: colors.text }}>Loading...</Text>
       </View>
     );
   }
 
   // ── Bottom Navigation Bar ────────────────────────
   const BottomNav = () => (
-    <View style={styles.bottomNav}>
+    <View
+      style={[
+        styles.bottomNav,
+        { backgroundColor: colors.background, borderTopColor: colors.border },
+      ]}
+    >
       {[
         { key: "home", label: "🏠 Home" },
         { key: "workers", label: "👨 Workers" },
@@ -1040,7 +1146,11 @@ export default function HomeScreen() {
           <Text
             style={[
               styles.navTabText,
-              activeTab === tab.key && styles.navTabTextActive,
+              { color: colors.icon },
+              activeTab === tab.key && [
+                styles.navTabTextActive,
+                { color: colors.text },
+              ],
             ]}
           >
             {tab.label}
@@ -1053,9 +1163,15 @@ export default function HomeScreen() {
   // ── Services Screen ──────────────────────────────
   if (screen === "services") {
     return (
-      <View style={styles.screenWrapper}>
-        <ScrollView style={styles.container}>
-          <Text style={styles.title}>✂️ Service Management</Text>
+      <View
+        style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+      >
+        <ScrollView
+          style={[styles.container, { backgroundColor: colors.background }]}
+        >
+          <Text style={[styles.title, { color: colors.text }]}>
+            ✂️ Service Management
+          </Text>
 
           {/* Add Service Button */}
           <TouchableOpacity
@@ -1066,20 +1182,45 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           {/* Services List */}
-          <Text style={styles.sectionHeading}>Services List</Text>
+          <Text style={[styles.sectionHeading, { color: colors.text }]}>
+            Services List
+          </Text>
 
           {services.length === 0 ? (
-            <View style={styles.emptyStateCard}>
-              <Text style={styles.emptyStateText}>No services found</Text>
-              <Text style={styles.emptyStateSubText}>
+            <View
+              style={[
+                styles.emptyStateCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <Text style={[styles.emptyStateText, { color: colors.text }]}>
+                No services found
+              </Text>
+              <Text style={[styles.emptyStateSubText, { color: colors.icon }]}>
                 Add a service to continue
               </Text>
             </View>
           ) : (
             services.map((service) => (
-              <View key={service.id} style={styles.serviceCard}>
+              <View
+                key={service.id}
+                style={[
+                  styles.serviceCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
                 <View style={styles.serviceInfo}>
-                  <Text style={styles.serviceName}>{service.name}</Text>
+                  <Text style={[styles.serviceName, { color: colors.text }]}>
+                    {service.name}
+                  </Text>
                   <Text style={styles.servicePrice}>₹{service.price}</Text>
                 </View>
                 <View style={styles.serviceActions}>
@@ -1127,12 +1268,29 @@ export default function HomeScreen() {
   if (screen === "transaction") {
     if (activeWorkerNames.length === 0) {
       return (
-        <View style={styles.screenWrapper}>
-          <ScrollView style={styles.container}>
-            <Text style={styles.title}>➕ Add Transaction</Text>
-            <View style={styles.emptyStateCard}>
-              <Text style={styles.emptyStateText}>No active workers found</Text>
-              <Text style={styles.emptyStateSubText}>
+        <View
+          style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+        >
+          <ScrollView
+            style={[styles.container, { backgroundColor: colors.background }]}
+          >
+            <Text style={[styles.title, { color: colors.text }]}>
+              ➕ Add Transaction
+            </Text>
+            <View
+              style={[
+                styles.emptyStateCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <Text style={[styles.emptyStateText, { color: colors.text }]}>
+                No active workers found
+              </Text>
+              <Text style={[styles.emptyStateSubText, { color: colors.icon }]}>
                 Please add workers in Workers section first
               </Text>
             </View>
@@ -1155,12 +1313,29 @@ export default function HomeScreen() {
 
     if (services.length === 0) {
       return (
-        <View style={styles.screenWrapper}>
-          <ScrollView style={styles.container}>
-            <Text style={styles.title}>➕ Add Transaction</Text>
-            <View style={styles.emptyStateCard}>
-              <Text style={styles.emptyStateText}>No services available</Text>
-              <Text style={styles.emptyStateSubText}>
+        <View
+          style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+        >
+          <ScrollView
+            style={[styles.container, { backgroundColor: colors.background }]}
+          >
+            <Text style={[styles.title, { color: colors.text }]}>
+              ➕ Add Transaction
+            </Text>
+            <View
+              style={[
+                styles.emptyStateCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <Text style={[styles.emptyStateText, { color: colors.text }]}>
+                No services available
+              </Text>
+              <Text style={[styles.emptyStateSubText, { color: colors.icon }]}>
                 Please add services in Services section first
               </Text>
             </View>
@@ -1182,11 +1357,19 @@ export default function HomeScreen() {
     }
 
     return (
-      <View style={styles.screenWrapper}>
-        <ScrollView style={styles.container}>
-          <Text style={styles.title}>{t("addTransaction")}</Text>
+      <View
+        style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+      >
+        <ScrollView
+          style={[styles.container, { backgroundColor: colors.background }]}
+        >
+          <Text style={[styles.title, { color: colors.text }]}>
+            {t("addTransaction")}
+          </Text>
 
-          <Text style={styles.label}>{t("worker")}</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            {t("worker")}
+          </Text>
           <Picker
             selectedValue={selectedWorker}
             onValueChange={(value) => setSelectedWorker(value)}
@@ -1196,7 +1379,9 @@ export default function HomeScreen() {
             ))}
           </Picker>
 
-          <Text style={styles.label}>{t("service")}</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            {t("service")}
+          </Text>
           <Picker
             selectedValue={selectedService}
             onValueChange={(value) => {
@@ -1215,16 +1400,28 @@ export default function HomeScreen() {
             ))}
           </Picker>
 
-          <Text style={styles.label}>{t("amount")}</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            {t("amount")}
+          </Text>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                color: colors.text,
+              },
+            ]}
             value={amount}
             onChangeText={setAmount}
             keyboardType="numeric"
             placeholder={t("enterAmount")}
+            placeholderTextColor={colors.icon}
           />
 
-          <Text style={styles.label}>{t("paymentMode")}</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            {t("paymentMode")}
+          </Text>
           <Picker
             selectedValue={paymentMode}
             onValueChange={(value) => setPaymentMode(value)}
@@ -1251,17 +1448,23 @@ export default function HomeScreen() {
   // ── Transaction History Screen ───────────────────
   if (screen === "transactionHistory") {
     return (
-      <View style={styles.screenWrapper}>
-        <ScrollView style={styles.container}>
+      <View
+        style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+      >
+        <ScrollView
+          style={[styles.container, { backgroundColor: colors.background }]}
+        >
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => setScreen("home")}
           >
             <Text style={styles.buttonText}>{t("goBackToDashboard")}</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>{t("transactionsTitle")}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>
+            {t("transactionsTitle")}
+          </Text>
           {todayTransactions.length === 0 ? (
-            <Text style={styles.emptyStateText}>
+            <Text style={[styles.emptyStateText, { color: colors.icon }]}>
               {t("noTransactionsYetToday")}
             </Text>
           ) : (
@@ -1285,17 +1488,29 @@ export default function HomeScreen() {
     const monthlyProfit = monthlyRevenue - monthlyExpenseTotal;
 
     return (
-      <View style={styles.screenWrapper}>
-        <ScrollView style={styles.container}>
-          <Text style={styles.title}>{t("expensesTitle")}</Text>
+      <View
+        style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+      >
+        <ScrollView
+          style={[styles.container, { backgroundColor: colors.background }]}
+        >
+          <Text style={[styles.title, { color: colors.text }]}>
+            {t("expensesTitle")}
+          </Text>
 
           <View
             style={[
               styles.card,
-              { backgroundColor: todayProfit >= 0 ? "#e8f5e9" : "#fdecea" },
+              {
+                backgroundColor: todayProfit >= 0 ? "#e8f5e9" : "#fdecea",
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
             ]}
           >
-            <Text style={styles.cardTitle}>{t("todaysProfit")}</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              {t("todaysProfit")}
+            </Text>
             <Text
               style={[
                 styles.dashboardAmount,
@@ -1335,9 +1550,20 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>{t("expenseSummary")}</Text>
-            <Text style={styles.dashboardInfo}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              {t("expenseSummary")}
+            </Text>
+            <Text style={[styles.dashboardInfo, { color: colors.text }]}>
               Today : ₹{todayExpenseTotal}
             </Text>
             <Text style={styles.dashboardInfo}>
@@ -1345,9 +1571,13 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <Text style={styles.sectionHeading}>Add Expense</Text>
+          <Text style={[styles.sectionHeading, { color: colors.text }]}>
+            Add Expense
+          </Text>
 
-          <Text style={styles.label}>{t("amount")}</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            {t("amount")}
+          </Text>
           <TextInput
             style={styles.input}
             value={expenseAmount}
@@ -1357,8 +1587,15 @@ export default function HomeScreen() {
             placeholderTextColor="#aaa"
           />
 
-          <Text style={styles.label}>{t("category")}</Text>
-          <View style={styles.pickerWrapper}>
+          <Text style={[styles.label, { color: colors.text }]}>
+            {t("category")}
+          </Text>
+          <View
+            style={[
+              styles.pickerWrapper,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
             <Picker
               selectedValue={expenseCategory}
               onValueChange={(value) => setExpenseCategory(value)}
@@ -1369,9 +1606,18 @@ export default function HomeScreen() {
             </Picker>
           </View>
 
-          <Text style={styles.label}>{t("noteOptional")}</Text>
+          <Text style={[styles.label, { color: colors.text }]}>
+            {t("noteOptional")}
+          </Text>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                color: colors.text,
+              },
+            ]}
             value={expenseNote}
             onChangeText={setExpenseNote}
             placeholder="e.g. Hair Wax Purchase"
@@ -1382,13 +1628,27 @@ export default function HomeScreen() {
             <Text style={styles.buttonText}>{t("saveExpense")}</Text>
           </TouchableOpacity>
 
-          <Text style={styles.sectionHeading}>{t("expenseSummary")}</Text>
+          <Text style={[styles.sectionHeading, { color: colors.text }]}>
+            {t("expenseSummary")}
+          </Text>
 
           {expenses.length === 0 ? (
-            <Text style={styles.emptyText}>{t("expenseRecordNone")}</Text>
+            <Text style={[styles.emptyText, { color: colors.icon }]}>
+              {t("expenseRecordNone")}
+            </Text>
           ) : (
             expenses.map((e) => (
-              <View key={e.id} style={styles.expenseCard}>
+              <View
+                key={e.id}
+                style={[
+                  styles.expenseCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
                 <View style={styles.expenseLeft}>
                   <Text style={styles.expenseCategory}>{e.category}</Text>
                   {e.note ? (
@@ -1482,11 +1742,26 @@ export default function HomeScreen() {
     });
 
     return (
-      <View style={styles.screenWrapper}>
-        <ScrollView style={styles.container}>
-          <Text style={styles.title}>👨 Worker Management</Text>
+      <View
+        style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+      >
+        <ScrollView
+          style={[styles.container, { backgroundColor: colors.background }]}
+        >
+          <Text style={[styles.title, { color: colors.text }]}>
+            👨 Worker Management
+          </Text>
 
-          <View style={styles.statsCard}>
+          <View
+            style={[
+              styles.statsCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
             <View style={styles.statBox}>
               <Text style={styles.statNumber}>{activeCount}</Text>
               <Text style={styles.statLabel}>Active Workers</Text>
@@ -1498,25 +1773,56 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <View style={styles.addWorkerCard}>
-            <Text style={styles.cardTitle}>➕ Add New Worker</Text>
+          <View
+            style={[
+              styles.addWorkerCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              ➕ Add New Worker
+            </Text>
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  color: colors.text,
+                },
+              ]}
               placeholder="Enter worker name"
               value={newWorkerName}
               onChangeText={setNewWorkerName}
-              placeholderTextColor="#aaa"
+              placeholderTextColor={colors.icon}
             />
             <TouchableOpacity style={styles.saveButton} onPress={addWorker}>
               <Text style={styles.buttonText}>Save Worker</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.sectionHeading}>Workers List</Text>
+          <Text style={[styles.sectionHeading, { color: colors.text }]}>
+            Workers List
+          </Text>
 
           {workers.length === 0 ? (
-            <View style={styles.emptyStateCard}>
-              <Text style={styles.emptyStateText}>No workers found</Text>
+            <View
+              style={[
+                styles.emptyStateCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <Text style={[styles.emptyStateText, { color: colors.text }]}>
+                No workers found
+              </Text>
               <Text style={styles.emptyStateSubText}>
                 Add a worker to continue
               </Text>
@@ -1538,15 +1844,26 @@ export default function HomeScreen() {
                       <Text style={styles.separatorText}>Inactive Workers</Text>
                     </View>
                   )}
-                  <View style={styles.workerManagementCard}>
+                  <View
+                    style={[
+                      styles.workerManagementCard,
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                        borderWidth: 1,
+                      },
+                    ]}
+                  >
                     <View style={styles.workerInfo}>
-                      <Text style={styles.workerName}>
+                      <Text style={[styles.workerName, { color: colors.text }]}>
                         {worker.name}
                         {!isActive && (
                           <Text style={styles.inactiveBadge}> (Inactive)</Text>
                         )}
                       </Text>
-                      <Text style={styles.workerSubText}>
+                      <Text
+                        style={[styles.workerSubText, { color: colors.icon }]}
+                      >
                         {isSettled
                           ? "✅ Settled today"
                           : "⏳ Pending settlement"}
@@ -1597,12 +1914,26 @@ export default function HomeScreen() {
             })
           )}
 
-          <Text style={styles.sectionHeading}>Today's Settlements</Text>
+          <Text style={[styles.sectionHeading, { color: colors.text }]}>
+            Today's Settlements
+          </Text>
           {settlements.length === 0 ? (
-            <Text style={styles.emptyText}>No settlements yet</Text>
+            <Text style={[styles.emptyText, { color: colors.icon }]}>
+              No settlements yet
+            </Text>
           ) : (
             settlements.map((s, i) => (
-              <View key={i} style={styles.settlementCard}>
+              <View
+                key={i}
+                style={[
+                  styles.settlementCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
                 <View>
                   <Text style={styles.workerName}>{s.worker}</Text>
                   <Text style={styles.workerSubText}>{s.settledAt}</Text>
@@ -1716,12 +2047,29 @@ export default function HomeScreen() {
     const maxTrend = Math.max(...last7.map((d) => d.amount), 1);
 
     return (
-      <View style={styles.screenWrapper}>
-        <ScrollView style={styles.container}>
-          <Text style={styles.title}>📊 Analytics</Text>
+      <View
+        style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+      >
+        <ScrollView
+          style={[styles.container, { backgroundColor: colors.background }]}
+        >
+          <Text style={[styles.title, { color: colors.text }]}>
+            📊 Analytics
+          </Text>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>This Week — Revenue</Text>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              This Week — Revenue
+            </Text>
             <Text style={styles.dashboardAmount}>₹{weekRevenue}</Text>
             <Text style={styles.dashboardInfo}>Cash : ₹{weekCash}</Text>
             <Text style={styles.dashboardInfo}>UPI : ₹{weekUPI}</Text>
@@ -1733,10 +2081,16 @@ export default function HomeScreen() {
           <View
             style={[
               styles.card,
-              { backgroundColor: monthProfit >= 0 ? "#e8f5e9" : "#fdecea" },
+              {
+                backgroundColor: monthProfit >= 0 ? "#e8f5e9" : "#fdecea",
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
             ]}
           >
-            <Text style={styles.cardTitle}>This Month</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              This Month
+            </Text>
             <Text style={styles.dashboardAmount}>₹{monthRevenue}</Text>
             <Text style={styles.dashboardInfo}>Cash : ₹{monthCash}</Text>
             <Text style={styles.dashboardInfo}>UPI : ₹{monthUPI}</Text>
@@ -1756,16 +2110,38 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>📅 Avg Per Day</Text>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              📅 Avg Per Day
+            </Text>
             <Text style={styles.dashboardAmount}>₹{avgDaily}</Text>
             <Text style={styles.dashboardInfo}>
               Over {reports.length} closed days
             </Text>
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>🏆 Top Worker</Text>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              🏆 Top Worker
+            </Text>
             {topWorkerName ? (
               <>
                 <Text style={styles.dashboardAmount}>{topWorkerName}</Text>
@@ -1778,8 +2154,19 @@ export default function HomeScreen() {
             )}
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>✂️ Top Service</Text>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              ✂️ Top Service
+            </Text>
             {topServiceName ? (
               <>
                 <Text style={styles.dashboardAmount}>{topServiceName}</Text>
@@ -1792,8 +2179,19 @@ export default function HomeScreen() {
             )}
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Last 7 Days</Text>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              Last 7 Days
+            </Text>
             {last7.map((day, i) => (
               <View key={i} style={styles.trendRow}>
                 <Text style={styles.trendLabel}>{day.label}</Text>
@@ -1823,8 +2221,12 @@ export default function HomeScreen() {
   if (screen === "reports") {
     if (selectedReport) {
       return (
-        <View style={styles.screenWrapper}>
-          <ScrollView style={styles.container}>
+        <View
+          style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+        >
+          <ScrollView
+            style={[styles.container, { backgroundColor: colors.background }]}
+          >
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => setSelectedReport(null)}
@@ -1832,20 +2234,31 @@ export default function HomeScreen() {
               <Text style={styles.buttonText}>← Back to Reports</Text>
             </TouchableOpacity>
 
-            <Text style={styles.title}>
+            <Text style={[styles.title, { color: colors.text }]}>
               📋 {selectedReport.date}
               {selectedReport.closedAt ? `\n${selectedReport.closedAt}` : ""}
             </Text>
 
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Revenue</Text>
-              <Text style={styles.dashboardAmount}>
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                },
+              ]}
+            >
+              <Text style={[styles.cardTitle, { color: colors.text }]}>
+                Revenue
+              </Text>
+              <Text style={[styles.dashboardAmount, { color: colors.text }]}>
                 ₹{selectedReport.totalCollection}
               </Text>
-              <Text style={styles.dashboardInfo}>
+              <Text style={[styles.dashboardInfo, { color: colors.icon }]}>
                 Cash : ₹{selectedReport.cashTotal}
               </Text>
-              <Text style={styles.dashboardInfo}>
+              <Text style={[styles.dashboardInfo, { color: colors.icon }]}>
                 UPI : ₹{selectedReport.upiTotal}
               </Text>
             </View>
@@ -1857,10 +2270,14 @@ export default function HomeScreen() {
                   {
                     backgroundColor:
                       (selectedReport.profit ?? 0) >= 0 ? "#e8f5e9" : "#fdecea",
+                    borderColor: colors.border,
+                    borderWidth: 1,
                   },
                 ]}
               >
-                <Text style={styles.cardTitle}>Expenses & Profit</Text>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  Expenses & Profit
+                </Text>
                 <Text style={[styles.dashboardInfo, { color: "#d9534f" }]}>
                   Expenses : ₹{selectedReport.totalExpenses}
                 </Text>
@@ -1899,15 +2316,31 @@ export default function HomeScreen() {
               </View>
             )}
 
-            <Text style={styles.sectionHeading}>Worker Earnings</Text>
+            <Text style={[styles.sectionHeading, { color: colors.text }]}>
+              Worker Earnings
+            </Text>
             {selectedReport.workerReport.map((item: any) => (
-              <View key={item.worker} style={styles.workerCard}>
-                <Text style={styles.workerName}>{item.worker}</Text>
+              <View
+                key={item.worker}
+                style={[
+                  styles.workerCard,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
+                <Text style={[styles.workerName, { color: colors.text }]}>
+                  {item.worker}
+                </Text>
                 <View>
-                  <Text style={styles.workerAmount}>
+                  <Text style={[styles.workerAmount, { color: colors.tint }]}>
                     Work: ₹{item.workDone}
                   </Text>
-                  <Text style={styles.workerSubText}>Share: ₹{item.share}</Text>
+                  <Text style={[styles.workerSubText, { color: colors.icon }]}>
+                    Share: ₹{item.share}
+                  </Text>
                 </View>
               </View>
             ))}
@@ -1916,16 +2349,36 @@ export default function HomeScreen() {
             {selectedReport.serviceReport &&
               selectedReport.serviceReport.length > 0 && (
                 <>
-                  <Text style={styles.sectionHeading}>
+                  <Text style={[styles.sectionHeading, { color: colors.text }]}>
                     ✂️ Service Breakdown
                   </Text>
                   {selectedReport.serviceReport.map(
                     (item: any, idx: number) => (
-                      <View key={idx} style={styles.serviceBreakdownCard}>
-                        <Text style={styles.serviceBreakdownName}>
+                      <View
+                        key={idx}
+                        style={[
+                          styles.serviceBreakdownCard,
+                          {
+                            backgroundColor: colors.card,
+                            borderColor: colors.border,
+                            borderWidth: 1,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.serviceBreakdownName,
+                            { color: colors.text },
+                          ]}
+                        >
                           {item.service}
                         </Text>
-                        <Text style={styles.serviceBreakdownCount}>
+                        <Text
+                          style={[
+                            styles.serviceBreakdownCount,
+                            { color: colors.tint },
+                          ]}
+                        >
                           {item.count} times
                         </Text>
                       </View>
@@ -1940,14 +2393,31 @@ export default function HomeScreen() {
     }
 
     return (
-      <View style={styles.screenWrapper}>
-        <ScrollView style={styles.container}>
-          <Text style={styles.title}>📁 Reports</Text>
+      <View
+        style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+      >
+        <ScrollView
+          style={[styles.container, { backgroundColor: colors.background }]}
+        >
+          <Text style={[styles.title, { color: colors.text }]}>📁 Reports</Text>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Total Closed Days</Text>
-            <Text style={styles.dashboardAmount}>{reports.length}</Text>
-            <Text style={styles.dashboardInfo}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: 1,
+              },
+            ]}
+          >
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              Total Closed Days
+            </Text>
+            <Text style={[styles.dashboardAmount, { color: colors.text }]}>
+              {reports.length}
+            </Text>
+            <Text style={[styles.dashboardInfo, { color: colors.icon }]}>
               Total Revenue : ₹
               {reports.reduce((sum, r) => sum + r.totalCollection, 0)}
             </Text>
@@ -2026,9 +2496,15 @@ export default function HomeScreen() {
 
   // ── Home Screen (Dashboard) ──────────────────────
   return (
-    <View style={styles.screenWrapper}>
-      <ScrollView style={styles.container}>
-        <Text style={styles.title}>💈 Pankaj Hair Salon</Text>
+    <View
+      style={[styles.screenWrapper, { backgroundColor: colors.background }]}
+    >
+      <ScrollView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <Text style={[styles.title, { color: colors.text }]}>
+          💈 Pankaj Hair Salon
+        </Text>
 
         <SummaryCard
           totalCollection={totalCollection}

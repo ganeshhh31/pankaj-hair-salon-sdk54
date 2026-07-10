@@ -75,10 +75,7 @@ export const LocalizationProvider = ({
   }, []);
 
   const t = useCallback(
-    (
-      key: keyof (typeof translations)[Language],
-      params?: Record<string, string | number>,
-    ) => {
+    (key: TranslationKey, params?: Record<string, string | number>) => {
       const translationSet =
         translations[language] ?? translations[defaultLanguage];
       const value = translationSet[key] as string | undefined;
